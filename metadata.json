@@ -1,0 +1,6 @@
+{
+  "name": "Regression Lab",
+  "description": "Interactive statistics and pharmacokinetics learning studio featuring simple linear regression, log transformations, residual diagnostics, and pharmacokinetic simulations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
