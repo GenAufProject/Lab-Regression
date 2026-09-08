@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { Calculator, Sparkles } from 'lucide-react';
 import { RegressionStatistics } from '../../types';
-import { formatNumber } from '../../lib/statistics/formatting';
+import {
+  formatConfidenceLevel,
+  formatNumber,
+  formatPValue,
+  significanceLabel,
+} from '../../lib/statistics/formatting';
 import { predictY } from '../../lib/statistics/linearRegression';
 import { TooltipTerm } from '../common/TooltipTerm';
 
@@ -62,9 +67,24 @@ export const RegressionSummary: React.FC<RegressionSummaryProps> = ({
           </div>
           <div className="text-lg font-bold font-mono text-neutral-900">
             {formatNumber(stats.slope, decimals)}
+            {/* Phase 2: slope significance indicator (spec §32 — expose corrected values) */}
+            {stats.pValueSlope !== undefined && !isNaN(stats.pValueSlope) && (
+              <span
+                className={`ml-1.5 text-[10px] font-bold ${
+                  significanceLabel(stats.pValueSlope).color === 'emerald'
+                    ? 'text-emerald-600'
+                    : significanceLabel(stats.pValueSlope).color === 'amber'
+                    ? 'text-amber-600'
+                    : 'text-neutral-400'
+                }`}
+                title={`p = ${formatPValue(stats.pValueSlope)} (${significanceLabel(stats.pValueSlope).label})`}
+              >
+                {significanceLabel(stats.pValueSlope).symbol}
+              </span>
+            )}
           </div>
-          <div className="text-[10px] text-neutral-500 mt-1 truncate" title={`95% CI: [${formatNumber(stats.ciSlope[0], decimals)}, ${formatNumber(stats.ciSlope[1], decimals)}]`}>
-            95% CI: [{formatNumber(stats.ciSlope[0], 2)}, {formatNumber(stats.ciSlope[1], 2)}]
+          <div className="text-[10px] text-neutral-500 mt-1 truncate" title={`${formatConfidenceLevel(stats.confidenceLevel)} CI: [${formatNumber(stats.ciSlope[0], decimals)}, ${formatNumber(stats.ciSlope[1], decimals)}]`}>
+            {formatConfidenceLevel(stats.confidenceLevel)} CI: [{formatNumber(stats.ciSlope[0], 2)}, {formatNumber(stats.ciSlope[1], 2)}]
           </div>
         </div>
 
@@ -77,8 +97,8 @@ export const RegressionSummary: React.FC<RegressionSummaryProps> = ({
           <div className="text-lg font-bold font-mono text-neutral-900">
             {formatNumber(stats.intercept, decimals)}
           </div>
-          <div className="text-[10px] text-neutral-500 mt-1 truncate" title={`95% CI: [${formatNumber(stats.ciIntercept[0], decimals)}, ${formatNumber(stats.ciIntercept[1], decimals)}]`}>
-            95% CI: [{formatNumber(stats.ciIntercept[0], 2)}, {formatNumber(stats.ciIntercept[1], 2)}]
+          <div className="text-[10px] text-neutral-500 mt-1 truncate" title={`${formatConfidenceLevel(stats.confidenceLevel)} CI: [${formatNumber(stats.ciIntercept[0], decimals)}, ${formatNumber(stats.ciIntercept[1], decimals)}]`}>
+            {formatConfidenceLevel(stats.confidenceLevel)} CI: [{formatNumber(stats.ciIntercept[0], 2)}, {formatNumber(stats.ciIntercept[1], 2)}]
           </div>
         </div>
 
@@ -93,17 +113,20 @@ export const RegressionSummary: React.FC<RegressionSummaryProps> = ({
           </div>
           <div className="text-[10px] text-neutral-500 mt-1">
             {(stats.rSquared * 100).toFixed(1)}% explained
+            {stats.adjustedRSquared !== undefined && (
+              <span className="text-neutral-400"> · adj R² = {formatNumber(stats.adjustedRSquared, decimals)}</span>
+            )}
           </div>
         </div>
 
-        {/* Pearson r / RMSE */}
+        {/* Pearson r / Residual Standard Error (spec §11: NOT "RMSE") */}
         <div className="bg-white border border-neutral-200/80 rounded-xl p-3 shadow-2xs">
           <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
-            <TooltipTerm term="RMSE">RMSE</TooltipTerm>
-            <span className="text-[10px] text-neutral-400 font-mono">Error</span>
+            <TooltipTerm term="Residual Standard Error">Residual Std. Error (s)</TooltipTerm>
+            <span className="text-[10px] text-neutral-400 font-mono">σ̂</span>
           </div>
           <div className="text-lg font-bold font-mono text-neutral-900">
-            {formatNumber(stats.rmse, decimals)}
+            {formatNumber(stats.residualStandardError ?? stats.rmse, decimals)}
           </div>
           <div className="text-[10px] text-neutral-500 mt-1">
             r = {formatNumber(stats.r, decimals)}
@@ -140,13 +163,13 @@ export const RegressionSummary: React.FC<RegressionSummaryProps> = ({
                 </span>
               </div>
               <div>
-                <span className="text-neutral-500 text-[11px] block">95% Mean CI:</span>
+                <span className="text-neutral-500 text-[11px] block">{formatConfidenceLevel(stats.confidenceLevel)} Mean CI:</span>
                 <span className="font-mono text-neutral-700 text-[11px]">
                   [{formatNumber(prediction.ciLower, 2)}, {formatNumber(prediction.ciUpper, 2)}]
                 </span>
               </div>
               <div>
-                <span className="text-neutral-500 text-[11px] block">95% Prediction Interval:</span>
+                <span className="text-neutral-500 text-[11px] block">{formatConfidenceLevel(stats.confidenceLevel)} Prediction Interval:</span>
                 <span className="font-mono text-neutral-700 text-[11px]">
                   [{formatNumber(prediction.piLower, 2)}, {formatNumber(prediction.piUpper, 2)}]
                 </span>

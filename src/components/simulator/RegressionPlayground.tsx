@@ -320,9 +320,9 @@ export const RegressionPlayground: React.FC = () => {
                 </div>
 
                 <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">
-                  <span className="text-neutral-500 block text-[11px]">Residual RMSE:</span>
+                  <span className="text-neutral-500 block text-[11px]">Residual Std. Error (s):</span>
                   <div className="font-mono font-bold text-neutral-900 text-sm">
-                    {formatNumber(stats.rmse, 3)}
+                    {formatNumber(stats.residualStandardError ?? stats.rmse, 3)}
                   </div>
                   <div className="text-[10px] text-neutral-500 mt-0.5">
                     Target σ: {noiseStd.toFixed(1)}

@@ -134,7 +134,11 @@ export const ResidualPlot: React.FC<ResidualPlotProps> = ({ stats, height = 320 
             strokeWidth="1.8"
           />
 
-          {/* Standard error 2*RMSE threshold bands (dashed) */}
+          {/* Standard error threshold bands (±2s, where s = residual standard error).
+              Spec §11: stats.rmse actually holds the residual standard error
+              √(SSE/(n-2)), NOT the prediction RMSE √(SSE/n). The label reflects
+              this — "±2s" is the conventional notation for ±2 residual standard
+              errors, which under normality corresponds to ~95% of residuals. */}
           {stats.rmse > 0 && (
             <g stroke="#f59e0b" strokeWidth="1" strokeDasharray="4 3" opacity={0.7}>
               <line
@@ -155,7 +159,7 @@ export const ResidualPlot: React.FC<ResidualPlotProps> = ({ stats, height = 320 
                 textAnchor="end"
                 className="text-[9px] fill-amber-700 font-mono"
               >
-                +2 RMSE (Threshold)
+                +2s (≈95% bound)
               </text>
               <text
                 x={margin.left + innerWidth - 6}
@@ -163,7 +167,7 @@ export const ResidualPlot: React.FC<ResidualPlotProps> = ({ stats, height = 320 
                 textAnchor="end"
                 className="text-[9px] fill-amber-700 font-mono"
               >
-                -2 RMSE (Threshold)
+                -2s (≈95% bound)
               </text>
             </g>
           )}

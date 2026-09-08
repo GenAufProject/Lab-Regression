@@ -29,8 +29,18 @@ const DEFINITIONS: Record<string, { title: string; explanation: string; formula?
   },
   RMSE: {
     title: 'Root Mean Squared Error (RMSE)',
-    explanation: 'The typical magnitude of regression residuals in the original measurement units of Y.',
-    formula: 'RMSE = √(SSE / (n - 2))',
+    explanation:
+      'The square root of the mean of squared residuals, using divisor n (NOT n-2). ' +
+      'Distinct from the residual standard error, which uses n-2. RMSE is more common in forecasting / ML contexts.',
+    formula: 'RMSE = √( SSE / n )',
+  },
+  'Residual Standard Error': {
+    title: 'Residual Standard Error (s)',
+    explanation:
+      'The estimated standard deviation of the residual error term, using unbiased divisor (n-2). ' +
+      'This is the quantity used to compute SE(b), SE(a), confidence intervals, and prediction intervals ' +
+      'for OLS regression. Under the LINE assumptions, ~95% of residuals fall within ±2s of zero.',
+    formula: 's = √( SSE / (n - 2) )',
   },
   SSE: {
     title: 'Sum of Squared Errors (SSE)',

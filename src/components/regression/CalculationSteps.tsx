@@ -90,6 +90,27 @@ export const CalculationSteps: React.FC<CalculationStepsProps> = ({
       formula: `\\hat{Y} = ${formatNumber(stats.intercept, decimals)} ${stats.slope >= 0 ? '+' : '-'} ${formatNumber(Math.abs(stats.slope), decimals)}X, \\quad R^2 = 1 - \\frac{SSE}{SST} = 1 - \\frac{${formatNumber(stats.sse, decimals)}}{${formatNumber(stats.sst, decimals)}} = ${formatNumber(stats.rSquared, decimals)}`,
       result: `Equation: Ŷ = ${formatNumber(stats.intercept, decimals)} ${stats.slope >= 0 ? '+' : '-'} ${formatNumber(Math.abs(stats.slope), decimals)}X (R² = ${(stats.rSquared * 100).toFixed(1)}%)`,
     },
+    {
+      step: 11,
+      title: 'Residual Standard Error & Inferential Statistics (Phase 2)',
+      desc: `The residual standard error s = √(SSE/(n-2)) estimates the typical spread of residuals. ` +
+            `It is used to compute the standard errors of the slope and intercept, which in turn yield ` +
+            `t-statistics, confidence intervals, and p-values for hypothesis testing. ` +
+            `For OLS with intercept and n > 2, degrees of freedom df = n - 2 = ${stats.n - 2}.`,
+      formula:
+        `s = \\sqrt{\\frac{SSE}{n-2}} = \\sqrt{\\frac{${formatNumber(stats.sse, decimals)}}{${stats.n - 2}}} = ${formatNumber(stats.residualStandardError ?? stats.rmse, decimals)} \\\\[6pt] ` +
+        `SE(b) = \\frac{s}{\\sqrt{S_{xx}}} = ${formatNumber(stats.seSlope, decimals)}, \\quad ` +
+        `SE(a) = s\\sqrt{\\tfrac{1}{n} + \\tfrac{\\bar{x}^2}{S_{xx}}} = ${formatNumber(stats.seIntercept, decimals)} \\\\[6pt] ` +
+        `t_b = \\frac{b}{SE(b)} = ${formatNumber(stats.tStatSlope, decimals)}, \\quad ` +
+        `t_a = \\frac{a}{SE(a)} = ${formatNumber(stats.tStatIntercept, decimals)}`,
+      result:
+        `s = ${formatNumber(stats.residualStandardError ?? stats.rmse, decimals)}  |  ` +
+        `df = ${stats.n - 2}  |  ` +
+        `t(b) = ${formatNumber(stats.tStatSlope, decimals)}` +
+        (stats.pValueSlope !== undefined && !isNaN(stats.pValueSlope)
+          ? `  |  p(b) = ${stats.pValueSlope < 0.001 ? '< 0.001' : stats.pValueSlope.toFixed(4)}`
+          : ''),
+    },
   ];
 
   return (
@@ -101,7 +122,7 @@ export const CalculationSteps: React.FC<CalculationStepsProps> = ({
             Step-by-Step Derivation & Full Calculation Table
           </h3>
         </div>
-        <span className="text-xs text-neutral-500">10 Sequential OLS Steps</span>
+        <span className="text-xs text-neutral-500">11 Sequential OLS Steps</span>
       </div>
 
       {/* Sequential Accordion Steps */}

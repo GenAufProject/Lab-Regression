@@ -297,7 +297,7 @@ export const TransformationModule: React.FC<TransformationModuleProps> = ({
                 <th className="py-2.5 px-3">Fitted Equation</th>
                 <th className="py-2.5 px-3">Back-Transformed Form</th>
                 <th className="py-2.5 px-3 text-right">R² (Fitted Scale)</th>
-                <th className="py-2.5 px-3 text-right">RMSE (Fitted Scale)</th>
+                <th className="py-2.5 px-3 text-right">Residual Std. Error (s)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 font-mono">

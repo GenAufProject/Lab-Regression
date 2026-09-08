@@ -86,3 +86,48 @@ export function formatPKModel(
 
   return { plain, latex };
 }
+
+/**
+ * Phase 2: Formats a p-value with adaptive precision.
+ * - p < 0.001 → "< 0.001"
+ * - p < 0.01  → 3 decimals
+ * - p < 0.05  → 3 decimals
+ * - p < 0.10  → 3 decimals
+ * - p >= 0.10 → 2 decimals
+ *
+ * Spec §34: this is the presentation layer; the engine stores full precision.
+ */
+export function formatPValue(p: number | null | undefined): string {
+  if (p === null || p === undefined || isNaN(p)) return '—';
+  if (!isFinite(p)) return p > 0 ? '1.000' : '0.000';
+  if (p < 0.001) return '< 0.001';
+  if (p < 0.1) return p.toFixed(3);
+  return p.toFixed(2);
+}
+
+/**
+ * Phase 2: Returns a human-readable significance label for a p-value.
+ * Useful for inline indicators next to slope estimates.
+ */
+export function significanceLabel(p: number | null | undefined): {
+  label: string;
+  symbol: string;
+  color: 'emerald' | 'amber' | 'neutral';
+} {
+  if (p === null || p === undefined || isNaN(p)) {
+    return { label: 'n/a', symbol: '', color: 'neutral' };
+  }
+  if (p < 0.001) return { label: 'highly significant', symbol: '***', color: 'emerald' };
+  if (p < 0.01) return { label: 'very significant', symbol: '**', color: 'emerald' };
+  if (p < 0.05) return { label: 'significant', symbol: '*', color: 'emerald' };
+  if (p < 0.1) return { label: 'marginal', symbol: '†', color: 'amber' };
+  return { label: 'not significant', symbol: 'ns', color: 'neutral' };
+}
+
+/**
+ * Phase 2: Formats a confidence level (0.95) as a percentage string ("95%").
+ */
+export function formatConfidenceLevel(level: number): string {
+  if (level <= 0 || level >= 1) return '—';
+  return `${Math.round(level * 100)}%`;
+}

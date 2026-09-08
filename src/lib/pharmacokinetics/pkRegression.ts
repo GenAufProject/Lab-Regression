@@ -1,8 +1,10 @@
 import { PKDataPoint, PKRegressionResult, PKUnits, RegressionResult } from '../../types';
 import { calculateSimpleLinearRegression } from '../statistics/linearRegression';
 import {
+  calculateAUC,
   calculateC0FromIntercept,
   calculateClearance,
+  calculateClearanceFromAUC,
   calculateHalfLife,
   calculateKFromLnSlope,
   calculateKFromLog10Slope,
@@ -121,6 +123,11 @@ export function analyzePKData(
   }
 
   // Formulate equations
+  // NOTE (spec §34): these display strings are kept for backward compatibility
+  // but are DEPRECATED. They round values for presentation, which violates the
+  // "no rounding inside the engine" policy. The UI should build its own display
+  // strings from the full-precision numeric fields (slope, intercept,
+  // eliminationRateConstant, estimatedC0, auc) using formatting.ts.
   const sign = slope >= 0 ? '+' : '-';
   const absSlope = Math.abs(slope).toFixed(4);
   const interceptStr = intercept.toFixed(4);
@@ -132,10 +139,34 @@ export function analyzePKData(
   let volumeOfDistribution: number | undefined;
   let clearance: number | undefined;
 
+  // Phase 2: AUC₀→∞ = C₀ / k for the one-compartment IV bolus model.
+  // Computed unconditionally (does not require a dose) — it is a fundamental
+  // PK exposure metric on its own.
+  const auc = calculateAUC(estimatedC0, k);
+
   if (dose && dose > 0 && estimatedC0 > 0) {
     volumeOfDistribution = calculateVd(dose, estimatedC0);
     if (k > 0) {
+      // Canonical formula: CL = k · Vd
       clearance = calculateClearance(k, volumeOfDistribution);
+      // Independent cross-check: CL = Dose / AUC. For a perfectly specified
+      // one-compartment model these are identical; meaningful discrepancy
+      // flags numerical or model issues. Logged in tests but not surfaced
+      // to UI yet (deferring UI exposure to the dedicated PK phase).
+      const clearanceFromAUC = calculateClearanceFromAUC(dose, auc);
+      if (clearance && clearanceFromAUC) {
+        const relDiff = Math.abs(clearance - clearanceFromAUC) / Math.max(clearance, clearanceFromAUC);
+        // If the two CL estimates disagree by more than 0.01%, flag a warning.
+        // (For an ideal one-compartment mono-exponential fit they are identical
+        // up to floating-point error.)
+        if (relDiff > 1e-5 && !warning) {
+          warning = `Internal cross-check: CL from k·Vd (${clearance.toExponential(
+            4
+          )}) differs from CL = Dose/AUC (${clearanceFromAUC.toExponential(
+            4
+          )}) by ${(relDiff * 100).toExponential(2)}%. This is expected when the data deviates from a pure mono-exponential decay.`;
+        }
+      }
     }
   }
 
@@ -145,10 +176,12 @@ export function analyzePKData(
     intercept,
     rSquared: stats.rSquared,
     r: stats.r,
-    rmse: stats.rmse,
+    rmse: stats.rmse, // deprecated alias
+    residualStandardError: stats.residualStandardError,
     eliminationRateConstant: k,
     halfLife,
     estimatedC0,
+    auc,
     equationFitted,
     equationNatural,
     units,
