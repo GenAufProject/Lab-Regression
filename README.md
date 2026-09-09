@@ -1,10 +1,245 @@
 # Regression Lab — Statistical Engine Documentation
 
-> **Phase 3 scope**: build a first-class log-linear regression engine on top
-> of the Phase 2 OLS infrastructure. The log-regression engine reuses the
-> validated OLS engine — no duplicate regression algorithm (spec §6). The
-> transformation system is upgraded to a metadata-driven registry (spec §4).
-> Phase 2 content is preserved; this README is additive.
+> **Phase 4 scope**: build a comprehensive, regression-based pharmacokinetics
+> analysis engine on top of the Phase 2/3 infrastructure. The PK engine
+> reuses the validated OLS engine via `analyzePKData` (no duplicate math —
+> spec §6). Adds trapezoidal AUC, AUC extrapolation, terminal-phase
+> selection, prediction tables, calculation trace, educational
+> interpretation, and a centralized unit registry. Phase 1-3 content is
+> preserved; this README is additive.
+
+## 0. Phase 4 — Pharmacokinetics Analysis Engine
+
+### 0.1 What was added
+
+```
+src/lib/pharmacokinetics/
+  pkAnalysis.ts              ← NEW: Phase 4 canonical entry point (analyzeFirstOrderElimination)
+  trapezoidalAUC.ts          ← NEW: linear trapezoidal AUC + extrapolation
+  terminalPhase.ts           ← NEW: deterministic terminal-phase selection
+  pkInterpretation.ts        ← NEW: educational narratives for k, t½, C₀, R², AUC
+  pkUnits.ts                 ← NEW: centralized unit registry + derived-unit helpers
+src/components/pk/
+  PKWorkspace.tsx            ← UPGRADED: 10 organized sections, terminal-phase viz, AUC panel,
+                                prediction table, calculation trace, interpretation cards
+src/lib/data/
+  sampleDatasets.ts          ← + 3 new PK datasets (clean, noisy, non-first-order)
+src/types.ts                 ← + PKAnalysisSuccess, PKAnalysisError, TrapezoidalAUC,
+                                TerminalPhase, PKPredictionRow, PKCalculationStep,
+                                PKWarning, PKInterpretation, PKObservation, PKRoute
+src/lib/pharmacokinetics/__tests__/
+  pkAnalysis.test.ts         ← NEW: 61 tests
+```
+
+### 0.2 Architecture (spec §3)
+
+```
+UI (PKWorkspace.tsx)
+  ↓
+PK Analysis Service (pkAnalysis.ts)
+  ↓
+Phase 2 analyzePKData → Phase 2 calculateSimpleLinearRegression
+  ↓
+Pure Mathematical Functions (elimination.ts, trapezoidalAUC.ts)
+```
+
+The PK analysis service is the single entry point. React components never
+compute slope, intercept, k, t½, C₀, AUC, or residuals directly (spec §3).
+
+### 0.3 First-Order Elimination Model
+
+The engine fits the linearized form of the first-order elimination equation:
+
+| Log base | Linearized form | Slope interpretation | Back-transform |
+|---|---|---|---|
+| ln       | `ln(C) = ln(C₀) − kt`            | `slope = −k`                | `C = e^(a+bt)`     |
+| log10    | `log10(C) = log10(C₀) − (k/ln10)t` | `slope = −k/ln(10)`       | `C = 10^(a+bt)`    |
+
+Derived PK parameters:
+
+| Parameter | Formula | Notes |
+|---|---|---|
+| k (elimination rate) | `k = −slope` (ln) or `−slope × ln(10)` (log10) | Units: time⁻¹ |
+| t½ (half-life) | `t½ = ln(2) / k` | NaN when k ≤ 0 |
+| C₀ (initial conc.) | `C₀ = e^intercept` (ln) or `10^intercept` (log10) | Extrapolated, not observed |
+| Vd (vol. of dist.) | `Vd = Dose / C₀` | Requires dose input |
+| CL (clearance) | `CL = k × Vd = Dose / AUC` | Two independent computations |
+
+### 0.4 AUC — Trapezoidal + Extrapolation (spec §13, §14)
+
+The Phase 4 engine adds the standard non-compartmental AUC components:
+
+```
+AUC_last  = Σ [(C_i + C_{i+1}) / 2] × (t_{i+1} − t_i)    (linear trapezoidal, observed data)
+AUC_extra = C_last / k                                     (model-based extrapolation to ∞)
+AUC_total = AUC_last + AUC_extra
+AUC_theoretical = C₀ / k                                   (model-based, for comparison)
+extrapFraction = AUC_extra / AUC_total                     (regulatory flag if > 20%)
+```
+
+**Extrapolation is suppressed** (returns NaN) when:
+- k ≤ 0, NaN, or Infinity
+- C_last ≤ 0, NaN, or Infinity
+
+The UI explicitly labels AUC_extra as model-dependent and warns when the
+extrapolated fraction exceeds 20%.
+
+### 0.5 Terminal-Phase Selection (spec §15)
+
+Two deterministic strategies:
+
+1. **`all-points`** (default) — use every valid observation. Appropriate for
+   clean educational IV bolus data where the entire curve is terminal.
+
+2. **`best-rsquared-suffix`** — try every contiguous suffix of length ≥ 3
+   from the end of the time-sorted data, pick the one with the highest R²
+   on the log-linear fit. Deterministic and fully explainable: "we tried
+   every suffix from the end and picked the one with the best linear fit."
+
+The selected indices, point count, time range, method, R², and a human-
+readable explanation are exposed on the `TerminalPhase` result object.
+
+### 0.6 Predictions & Residuals (spec §11, §12)
+
+Each observation produces a `PKPredictionRow` with:
+
+| Field | Meaning |
+|---|---|
+| `concentrationObserved` | Raw measured concentration |
+| `concentrationTransformed` | `ln(C)` or `log10(C)` |
+| `concentrationPredictedTransformed` | `ẑ = a + b·t` |
+| `concentrationPredicted` | Back-transformed: `e^ẑ` or `10^ẑ` |
+| `residualTransformed` | `e_i = z_i − ẑ_i` (what OLS minimizes) |
+| `residualOriginal` | `y_i − ŷ_i` (informational only) |
+| `inTerminalPhase` | Whether this point is in the selected terminal phase |
+
+The `predictConcentration(time, regression)` helper is reusable for
+predictions at arbitrary times.
+
+### 0.7 Calculation Trace (spec §17)
+
+The engine generates a 7-step calculation trace, consumed verbatim by the UI:
+
+1. Transform C → z = log(C)
+2. Fit OLS regression: z = a + b·t
+3. Extract the slope (b)
+4. Derive elimination rate constant (k)
+5. Calculate half-life (t½)
+6. Estimate initial concentration (C₀)
+7. Compute AUC (trapezoidal + extrapolation)
+
+Each step has `step`, `title`, `description`, `formulaLatex`, and `result`.
+Generated by the domain layer; React renders verbatim.
+
+### 0.8 Educational Interpretation (spec §19)
+
+The `PKInterpretation` object provides narratives for k, t½, R², C₀, and AUC.
+The narratives explicitly avoid overclaiming:
+- R² narrative: "a high R² alone does NOT prove that the first-order
+  elimination model is appropriate"
+- C₀ narrative: "C₀ is NOT necessarily an observed measurement — it is the
+  model's prediction at t = 0"
+- AUC narrative: "values above 20% suggest the sampling window may be too
+  short and the AUC_total estimate becomes model-dependent"
+
+### 0.9 Unit Handling (spec §18)
+
+Centralized in `pkUnits.ts`:
+- `TIME_UNITS`, `CONCENTRATION_UNITS`, `DOSE_UNITS` registries
+- `unitDisplayName(symbol, category)` — symbol → human-readable
+- `isKnownUnit(symbol, category)` — validation
+- `deriveAUCUnitLabel(units)` — `${concentration}·${time}` (e.g. "mg/L·h")
+- `deriveClearanceUnitLabel(units)` — infers volume from concentration
+  denominator (e.g. "L/h", "mL/min")
+- `deriveVdUnitLabel(units)` — infers volume unit
+
+**No silent unit conversion.** The engine never converts between units; if
+the user selects "mg/L", all values are reported in mg/L.
+
+### 0.10 Validation & Error Handling (spec §5, §22, §29)
+
+Fatal errors (return `PKAnalysisError`):
+
+| Error type | Trigger |
+|---|---|
+| `INSUFFICIENT_DATA` | n < 2 valid pairs |
+| `NON_FINITE_VALUE` | NaN or Infinity in time or concentration |
+| `NON_POSITIVE_CONCENTRATION` | Any concentration ≤ 0 (required for log transform) |
+| `ZERO_TIME_VARIANCE` | All time values identical |
+| `INVALID_REGRESSION` | Underlying OLS regression failed |
+
+Non-fatal warnings (return `PKWarning[]` on success):
+
+| Warning code | Trigger |
+|---|---|
+| `POSITIVE_SLOPE` | Fitted slope ≥ 0 (contradicts first-order elimination) |
+| `POOR_TERMINAL_FIT` | R² < 0.90 on the log scale |
+| `HIGH_EXTRAPOLATION_FRACTION` | extrapFraction > 20% |
+| `FEW_TERMINAL_POINTS` | Terminal phase has < 3 points |
+| `DUPLICATE_TIMES` | Input contains duplicate time values |
+| `NON_MONOTONIC_TIME` | Input times not in ascending order |
+
+### 0.11 Phase 4 Test Suite
+
+```
+Test Files  8 passed (8)
+     Tests  306 passed (306)   ← 245 (Phase 1-3) + 61 (Phase 4)
+```
+
+The new `pkAnalysis.test.ts` (61 tests) covers:
+- First-order regression on synthetic data (spec §24)
+- ln vs log10 equivalence (spec §7)
+- Prediction (spec §11)
+- Trapezoidal AUC (spec §13)
+- AUC extrapolation (spec §14)
+- Terminal-phase selection (spec §15)
+- PK calculation trace (spec §17)
+- Cross-validation with regression engine (spec §25)
+- Validation & error handling (spec §5, §22, §29)
+- Educational interpretation (spec §19)
+- Unit handling (spec §18)
+- No rounding inside the engine (spec §26, §34)
+- Regression safety — Phase 1-3 functionality intact (spec §33)
+
+### 0.12 Sample Datasets (spec §23)
+
+Three new PK datasets added:
+
+1. **`pk-clean-first-order`** — `C(t) = 20·e^(−0.15t)`, 8 points, no noise.
+   Expected: k = 0.15 h⁻¹, t½ ≈ 4.62 h, C₀ = 20 mg/L, R² = 1.000.
+
+2. **`pk-noisy-first-order`** — same model with ±2-5% deterministic noise.
+   Realistic measurement variability; R² ≈ 0.995+.
+
+3. **`pk-non-first-order`** — bi-exponential `C(t) = 30·e^(−2t) + 12·e^(−0.1t)`.
+   Demonstrates why terminal-phase selection matters: a single log-linear
+   fit on all points shows curvature; the best-rsquared-suffix selector
+   picks the late points (t ≥ 6h) and recovers k ≈ 0.1 h⁻¹.
+
+### 0.13 Limitations (intentionally deferred per spec §32)
+
+- No population PK / nonlinear mixed-effects modeling
+- No multi-compartment modeling (the bi-exponential dataset is for
+  teaching terminal-phase selection, not for fitting a 2-compartment model)
+- No Bayesian PK / Monte Carlo simulation
+- No bioequivalence statistics / NCA regulatory reporting
+- No full IV infusion modeling (only IV bolus derived parameters: Vd, CL)
+- No multiple-dose steady state
+- No advanced dose optimization / clinical decision support
+- No oral absorption / first-pass modeling
+- Trapezoidal AUC uses linear trapezoidal rule only (log-trapezoidal and
+  up-down options not implemented)
+
+### 0.14 Educational Use Only
+
+The PK module is an educational analysis tool for teaching how regression
+is used to estimate pharmacokinetic parameters. It is NOT a substitute for
+validated clinical/pharmacometric software. Never use the outputs for
+patient-specific therapeutic drug monitoring or clinical dosing decisions.
+
+---
+
+# Phase 3 — Log-Linear Regression Engine (preserved)
 
 ## 0. Phase 3 — Log-Linear Regression Engine
 

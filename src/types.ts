@@ -320,6 +320,219 @@ export type LogRegressionAnalysis =
  */
 export type RegressionMode = 'linear' | 'log-linear';
 
+// ===========================================================================
+// Phase 4 — Pharmacokinetics Analysis Engine types (spec §4, §8, §12-§15)
+// ===========================================================================
+
+/**
+ * Phase 4: Route of administration. Currently only IV bolus is supported
+ * for derived-parameter calculation (Vd, CL); other routes are accepted
+ * but skip those derivations. Future phases may add oral, infusion, etc.
+ */
+export type PKRoute = 'iv-bolus' | 'iv-infusion' | 'oral' | 'im' | 'unknown';
+
+/**
+ * Phase 4: A single observation in a concentration-time dataset.
+ * Extends the existing PKDataPoint with optional dose/route/F metadata
+ * for forward-compatibility with future PK phases (spec §4).
+ */
+export type PKObservation = {
+  id: string;
+  time: number;
+  concentration: number;
+};
+
+/**
+ * Phase 4: Linear trapezoidal AUC components (spec §13, §14).
+ *
+ *   AUC_last  = Σ [(C_i + C_{i+1}) / 2] × (t_{i+1} − t_i)    (observed data only)
+ *   AUC_extra = C_last / k                                     (model-based extrapolation)
+ *   AUC_total = AUC_last + AUC_extra
+ *
+ * AUC_theoretical = C₀ / k is the model-based AUC from Phase 2 (kept separate
+ * so users can compare observed trapezoidal AUC against the theoretical
+ * mono-exponential AUC as a model-fit diagnostic).
+ */
+export type TrapezoidalAUC = {
+  /** Trapezoidal AUC over observed data points: AUC_last = Σ trapezoid areas. */
+  aucLast: number;
+  /** Per-interval trapezoid areas (length = n−1). */
+  intervals: { tStart: number; tEnd: number; cStart: number; cEnd: number; area: number }[];
+  /**
+   * Extrapolated AUC from C_last to infinity: AUC_extra = C_last / k.
+   * NaN when k ≤ 0 or C_last ≤ 0.
+   */
+  aucExtra: number;
+  /** AUC_total = AUC_last + AUC_extra. NaN when AUC_extra is NaN. */
+  aucTotal: number;
+  /**
+   * Theoretical AUC from the fitted model: AUC_theoretical = C₀ / k.
+   * (Same as Phase 2 `auc` field, repeated here for comparison.)
+   */
+  aucTheoretical: number;
+  /** Fraction of total AUC that is extrapolated: AUC_extra / AUC_total. */
+  extrapFraction: number;
+  /** True if extrapolation could not be computed (k invalid). */
+  extrapolationSuppressed: boolean;
+  /** Reason extrapolation was suppressed, if applicable. */
+  extrapolationSuppressedReason?: string;
+};
+
+/**
+ * Phase 4: Terminal-phase point selection (spec §15).
+ *
+ * The terminal elimination phase is the subset of observations used to fit
+ * the log-linear regression. Selecting too few points gives unstable slopes;
+ * selecting too many (including distribution/absorption phase points) biases
+ * the slope. The selected approach is deterministic and documented.
+ */
+export type TerminalPhase = {
+  /** Indices (0-based) of the selected points in the original data array. */
+  selectedIndices: number[];
+  /** Number of points used in the terminal regression. */
+  pointCount: number;
+  /** Time range of selected points. */
+  timeRange: { start: number; end: number };
+  /** Selection method identifier (e.g. 'all-points', 'best-rsquared-suffix'). */
+  method: string;
+  /** Human-readable explanation of how points were selected. */
+  explanation: string;
+  /** R² achieved by the regression on the selected points (educational). */
+  rSquared: number;
+};
+
+/**
+ * Phase 4: Per-observation prediction and residual row (spec §11, §12).
+ *
+ * Distinguishes:
+ *   - observed concentration (raw measurement)
+ *   - transformed concentration (ln(C) or log10(C))
+ *   - predicted transformed value (ẑ = a + b·t)
+ *   - predicted concentration (back-transformed: ŷ = exp(ẑ) or 10^ẑ)
+ *   - transformed residual (e_i = z_i − ẑ_i) — what OLS minimizes
+ *   - original-scale residual (y_i − ŷ_i) — informational only
+ */
+export type PKPredictionRow = {
+  id: string;
+  time: number;
+  concentrationObserved: number;
+  concentrationTransformed: number;
+  concentrationPredictedTransformed: number;
+  concentrationPredicted: number;
+  residualTransformed: number;
+  residualOriginal: number;
+  /** True if this point is in the selected terminal phase. */
+  inTerminalPhase: boolean;
+};
+
+/**
+ * Phase 4: PK calculation step (spec §17). Same shape as Phase 3 CalculationStep
+ * but kept as a separate type to allow PK-specific extensions in the future.
+ */
+export type PKCalculationStep = {
+  step: number;
+  title: string;
+  description: string;
+  /** KaTeX math string with full-precision values (no rounding). */
+  formulaLatex: string;
+  /** Short human-readable result summary. */
+  result: string;
+};
+
+/**
+ * Phase 4: Structured PK warning (spec §22, §29). Non-fatal issues that
+ * the user should be aware of but that do not prevent analysis.
+ */
+export type PKWarning = {
+  code:
+    | 'POSITIVE_SLOPE'
+    | 'POOR_TERMINAL_FIT'
+    | 'HIGH_EXTRAPOLATION_FRACTION'
+    | 'FEW_TERMINAL_POINTS'
+    | 'NON_MONOTONIC_TIME'
+    | 'DUPLICATE_TIMES'
+    | 'INSUFFICIENT_VARIATION';
+  message: string;
+  severity: 'info' | 'caution' | 'warning';
+};
+
+/**
+ * Phase 4: Educational interpretation narratives (spec §19).
+ */
+export type PKInterpretation = {
+  /** Narrative for the elimination rate constant k. */
+  kNarrative: string;
+  /** Narrative for the half-life t½. */
+  halfLifeNarrative: string;
+  /** Narrative for R² (with the caveat that high R² ≠ model validity). */
+  rSquaredNarrative: string;
+  /** Narrative for the extrapolated C₀. */
+  c0Narrative: string;
+  /** Narrative for AUC (if computed). */
+  aucNarrative: string;
+};
+
+/**
+ * Phase 4: Comprehensive PK analysis result (spec §8).
+ *
+ * This is the canonical result type returned by the Phase 4 PK analysis
+ * engine. It composes:
+ *   - the Phase 2 PKRegressionResult (slope, intercept, k, t½, C₀, AUC_theoretical)
+ *   - the Phase 3 LogRegressionResult's underlying OLS statistics
+ *   - Phase 4 additions: trapezoidal AUC, terminal phase, predictions,
+ *     calculation trace, interpretation, warnings
+ */
+export type PKAnalysisSuccess = {
+  status: 'success';
+  /** Log base used for the transformation. */
+  logBase: LogBase;
+  /** Original observations. */
+  rawData: PKObservation[];
+  /** Phase 2 compatible regression result (slope, intercept, k, t½, C₀, AUC=C₀/k). */
+  regression: PKRegressionResult;
+  /** Underlying OLS statistics on the transformed scale. */
+  olsStatistics: RegressionStatistics;
+  /** Trapezoidal AUC components (spec §13, §14). */
+  trapezoidalAUC: TrapezoidalAUC;
+  /** Terminal-phase selection metadata (spec §15). */
+  terminalPhase: TerminalPhase;
+  /** Per-observation predictions and residuals (spec §11, §12). */
+  predictions: PKPredictionRow[];
+  /** PK calculation trace (spec §17). */
+  calculationTrace: PKCalculationStep[];
+  /** Educational interpretation narratives (spec §19). */
+  interpretation: PKInterpretation;
+  /** Non-fatal warnings (spec §22, §29). */
+  warnings: PKWarning[];
+  /** Confidence level used for any interval calculations. */
+  confidenceLevel: number;
+  /** Units used for display. */
+  units: PKUnits;
+  /** Optional dose for Vd/CL derivation. */
+  dose?: number;
+};
+
+/**
+ * Phase 4: PK analysis error.
+ * Fatal validation errors that prevent analysis.
+ */
+export type PKAnalysisError = {
+  status: 'error';
+  type:
+    | 'INSUFFICIENT_DATA'
+    | 'LENGTH_MISMATCH'
+    | 'NON_FINITE_VALUE'
+    | 'NON_POSITIVE_CONCENTRATION'
+    | 'DUPLICATE_TIMES'
+    | 'ZERO_TIME_VARIANCE'
+    | 'INVALID_REGRESSION';
+  message: string;
+  /** Offending rows (1-indexed for human display). */
+  invalidRows?: { row: number; time?: number; concentration?: number; reason: string }[];
+};
+
+export type PKAnalysisOutcome = PKAnalysisSuccess | PKAnalysisError;
+
 export type PKUnits = {
   time: string; // e.g., "h", "min", "day"
   concentration: string; // e.g., "mg/L", "µg/mL", "ng/mL"
