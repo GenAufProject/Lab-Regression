@@ -240,4 +240,138 @@ export const PRACTICE_QUESTIONS: QuizQuestion[] = [
       'In the natural logarithm model ln(C) = ln(C0) - kt, the intercept represents ln(C0). To recover C0, exponentiate the intercept with base e: C0 = exp(2.3026) = e^2.3026 ≈ 10.0.',
     formulaNote: 'C_0 = e^{\\text{intercept}} = e^{2.3026} = 10.0',
   },
+  // -------------------------------------------------------------------------
+  // Phase 3 (spec §29): six new practice questions specifically targeting
+  // log-linear regression concepts: transformation effect, slope-as-PK-k,
+  // half-life computation, back-transformation, log10 evaluation, and
+  // multiplicative-vs-additive interpretation.
+  // -------------------------------------------------------------------------
+  {
+    id: 'q11-transform-effect',
+    category: 'log-linear',
+    title: 'Effect of ln Transformation on Y',
+    prompt:
+      'A dataset follows an exponential decay curve C(t) = 50·e^(−0.25t). When we apply the natural log transformation ln(C) and plot ln(C) vs t, what happens to the relationship?',
+    options: [
+      {
+        id: 'a',
+        text: 'The curved exponential decay becomes a straight line with slope −0.25 and intercept ln(50) ≈ 3.912.',
+        isCorrect: true,
+      },
+      {
+        id: 'b',
+        text: 'The transformation has no effect on the shape; ln(C) vs t remains curved.',
+        isCorrect: false,
+      },
+      {
+        id: 'c',
+        text: 'The transformation reverses the direction of the curve from decay to growth.',
+        isCorrect: false,
+      },
+      {
+        id: 'd',
+        text: 'The transformation removes all variation in the data, producing a horizontal line.',
+        isCorrect: false,
+      },
+    ],
+    explanation:
+      'ln(C(t)) = ln(50·e^(−0.25t)) = ln(50) + ln(e^(−0.25t)) = ln(50) − 0.25t. This is the linear form Y = a + bX with a = ln(50) ≈ 3.912 and b = −0.25. The logarithm converts the multiplicative exponential relationship into an additive linear one.',
+    formulaNote: '\\ln(C) = \\ln(C_0) - kt \\Rightarrow \\text{linear in } t',
+  },
+  {
+    id: 'q12-slope-as-k',
+    category: 'log-linear',
+    title: 'Slope as Elimination Rate Constant',
+    prompt:
+      'A first-order PK model is fitted as ln(C) = 2.0 − 0.2·t. What is the elimination rate constant k?',
+    options: [
+      { id: 'a', text: 'k = 0.2 h⁻¹', isCorrect: true },
+      { id: 'b', text: 'k = −0.2 h⁻¹', isCorrect: false },
+      { id: 'c', text: 'k = 2.0 h⁻¹', isCorrect: false },
+      { id: 'd', text: 'k = e^(−0.2) ≈ 0.819 h⁻¹', isCorrect: false },
+    ],
+    explanation:
+      'The linear form of first-order elimination using ln is ln(C) = ln(C₀) − kt. Comparing with ln(C) = 2.0 − 0.2t, the slope b = −0.2 = −k, so k = 0.2 h⁻¹. The slope is the negative of the elimination rate constant when using natural log.',
+    formulaNote: 'k = -\\text{slope} = -(-0.2) = 0.2 \\text{ h}^{-1}',
+  },
+  {
+    id: 'q13-half-life-from-k',
+    category: 'log-linear',
+    title: 'Half-Life from k',
+    prompt:
+      'Given an elimination rate constant k = 0.2 h⁻¹, what is the elimination half-life t½?',
+    options: [
+      { id: 'a', text: 't½ ≈ 3.47 h', isCorrect: true },
+      { id: 'b', text: 't½ ≈ 0.35 h', isCorrect: false },
+      { id: 'c', text: 't½ = 0.2 h', isCorrect: false },
+      { id: 'd', text: 't½ = 5 h', isCorrect: false },
+    ],
+    explanation:
+      't½ = ln(2) / k ≈ 0.69315 / 0.2 = 3.466 h. Half-life is inversely proportional to k. After one half-life, concentration drops to 50% of its starting value; after 5 half-lives, ~97% has been eliminated.',
+    formulaNote: 't_{1/2} = \\frac{\\ln(2)}{k} = \\frac{0.69315}{0.2} \\approx 3.47 \\text{ h}',
+  },
+  {
+    id: 'q14-back-transform-ln',
+    category: 'log-linear',
+    title: 'Back-Transformation of ln',
+    prompt:
+      'If ln(Y) = 1.5, what is Y on the original scale?',
+    options: [
+      { id: 'a', text: 'Y = e^1.5 ≈ 4.48', isCorrect: true },
+      { id: 'b', text: 'Y = 1.5', isCorrect: false },
+      { id: 'c', text: 'Y = 10^1.5 ≈ 31.6', isCorrect: false },
+      { id: 'd', text: 'Y = ln(1.5) ≈ 0.405', isCorrect: false },
+    ],
+    explanation:
+      'The natural logarithm uses base e. To back-transform from ln(Y) = z to Y, exponentiate with base e: Y = e^z = e^1.5 ≈ 4.4817. Confusing ln with log10 (answer c) is a classic error — log10 would require Y = 10^1.5.',
+    formulaNote: 'Y = e^{\\ln(Y)} = e^{1.5} \\approx 4.48',
+  },
+  {
+    id: 'q15-log10-evaluation',
+    category: 'log-linear',
+    title: 'log10 Back-Transformation',
+    prompt:
+      'If log10(Y) = 2, what is Y on the original scale?',
+    options: [
+      { id: 'a', text: 'Y = 10^2 = 100', isCorrect: true },
+      { id: 'b', text: 'Y = e^2 ≈ 7.389', isCorrect: false },
+      { id: 'c', text: 'Y = 2', isCorrect: false },
+      { id: 'd', text: 'Y = log10(2) ≈ 0.301', isCorrect: false },
+    ],
+    explanation:
+      'The common logarithm uses base 10. To back-transform from log10(Y) = z to Y, raise 10 to that power: Y = 10^z = 10^2 = 100. Using e (answer b) would be the back-transform for ln, not log10.',
+    formulaNote: 'Y = 10^{\\log_{10}(Y)} = 10^2 = 100',
+  },
+  {
+    id: 'q16-slope-interpretation-multiplicative',
+    category: 'log-linear',
+    title: 'Slope Interpretation: Additive or Multiplicative?',
+    prompt:
+      'In a log-linear model ln(Y) = a + bX with slope b = −0.15, what is the correct interpretation of the slope on the original Y scale?',
+    options: [
+      {
+        id: 'a',
+        text: 'Y is multiplied by e^(−0.15) ≈ 0.86 per unit increase in X (approximately a 14% decrease).',
+        isCorrect: true,
+      },
+      {
+        id: 'b',
+        text: 'Y decreases by exactly 0.15 units per unit increase in X.',
+        isCorrect: false,
+      },
+      {
+        id: 'c',
+        text: 'Y decreases by 15% per unit increase in X.',
+        isCorrect: false,
+      },
+      {
+        id: 'd',
+        text: 'Y increases by 0.15 units per unit increase in X.',
+        isCorrect: false,
+      },
+    ],
+    explanation:
+      'In a log-linear model, the slope acts on the logarithmic scale, not the original scale. The correct multiplicative factor is e^b = e^(−0.15) ≈ 0.8607, meaning Y is multiplied by ~0.86 per unit X. The exact percentage change is (e^b − 1) × 100% ≈ −13.93%, not exactly −15%. Treating the slope as an additive change in Y (answer b) or confusing it with a direct percentage (answer c) are both common student errors.',
+    formulaNote: '\\text{Multiplicative factor} = e^b = e^{-0.15} \\approx 0.86 \\\\[4pt] \\text{Percent change} = (e^b - 1) \\times 100\\% \\approx -13.93\\%',
+  },
 ];

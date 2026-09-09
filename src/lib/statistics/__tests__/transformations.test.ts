@@ -242,7 +242,10 @@ describe('transformDomainDescription', () => {
     expect(transformDomainDescription('sqrt')).toMatch(/≥ 0/);
   });
 
-  it('returns empty string for "none"', () => {
-    expect(transformDomainDescription('none')).toBe('');
+  it('returns a non-empty description for "none" (Phase 3 metadata-driven)', () => {
+    // Phase 3: 'none' now has a domainDescription of "All real numbers"
+    // instead of an empty string, since the metadata registry describes
+    // every transformation uniformly.
+    expect(transformDomainDescription('none')).toBe('All real numbers');
   });
 });

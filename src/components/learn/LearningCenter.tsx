@@ -13,7 +13,7 @@ export const LearningCenter: React.FC<LearningCenterProps> = ({ onNavigateToSect
   const [activeLesson, setActiveLesson] = useState<Lesson>(LESSONS[0]);
 
   const categories = [
-    { id: 'all', label: 'All Lessons (18)' },
+    { id: 'all', label: 'All Lessons (19)' },
     { id: 'core', label: 'Core Regression' },
     { id: 'diagnostics', label: 'Diagnostics & Residuals' },
     { id: 'transformations', label: 'Log Transformations' },
@@ -35,7 +35,7 @@ export const LearningCenter: React.FC<LearningCenterProps> = ({ onNavigateToSect
               <span>Interactive Learning Curriculum</span>
             </h3>
             <p className="text-xs text-neutral-500 mt-0.5">
-              18 comprehensive statistical and pharmacokinetic lessons designed for students and educators.
+              19 comprehensive statistical and pharmacokinetic lessons designed for students and educators.
             </p>
           </div>
 

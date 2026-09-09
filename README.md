@@ -1,8 +1,179 @@
-# Regression Lab — Phase 2 Statistical Engine Documentation
+# Regression Lab — Statistical Engine Documentation
 
-> **Phase 2 scope**: audit, validate, refactor, and harden the existing
-> statistical engine. The UI is preserved; only labels that conflated
-> RMSE with the residual standard error have been corrected (spec §11, §32).
+> **Phase 3 scope**: build a first-class log-linear regression engine on top
+> of the Phase 2 OLS infrastructure. The log-regression engine reuses the
+> validated OLS engine — no duplicate regression algorithm (spec §6). The
+> transformation system is upgraded to a metadata-driven registry (spec §4).
+> Phase 2 content is preserved; this README is additive.
+
+## 0. Phase 3 — Log-Linear Regression Engine
+
+### 0.1 What was added
+
+```
+src/lib/statistics/
+  logRegression.ts          ← NEW: log-linear engine (reuses OLS)
+  regressionAnalysis.ts     ← NEW: unified dispatcher (linear | log-linear)
+  transformations.ts        ← UPGRADED: TRANSFORMATION_REGISTRY metadata
+src/components/transformations/
+  TransformationModule.tsx  ← UPGRADED: log-regression UI, dual-view, trace
+src/components/charts/
+  LogRegressionChart.tsx    ← NEW: dual-view chart (original curve | transformed line)
+src/lib/data/
+  sampleDatasets.ts         ← + exponential-decay-demo dataset (spec §30)
+  learningContent.ts        ← + Lesson 19 "Why take the logarithm?" (spec §28)
+  quizQuestions.ts          ← + 6 log-linear practice questions (spec §29)
+src/types.ts                ← + LogRegressionResult, CalculationStep, etc.
+src/lib/statistics/__tests__/
+  logRegression.test.ts     ← NEW: 56 tests
+```
+
+### 0.2 Log-Linear Model Definition
+
+A log-linear regression fits a linear model to a logarithmically transformed
+response variable (spec §34):
+
+```
+ln(Y) = a + b·X        (natural-log model)
+log10(Y) = a + b·X     (common-log model)
+```
+
+The engine transforms Y, fits the existing Phase 2 OLS regression on the
+transformed scale, and back-transforms predictions via:
+
+| Log base | Back-transform | Multiplicative factor | % change |
+|---|---|---|---|
+| ln       | ŷ = e^(a+bX)    | e^b        | (e^b − 1) × 100% |
+| log10    | ŷ = 10^(a+bX)   | 10^b       | (10^b − 1) × 100% |
+
+**Critical distinction (spec §11, §12):**
+- R² is computed on the **transformed scale** and must not be directly compared
+  to raw-Y R².
+- Transformed residuals (e_i = z_i − ẑ_i) are what OLS minimizes.
+- Original-scale differences (y_i − ŷ_i) are informational only.
+- Back-transformed predictions are **median** predictions, not mean predictions
+  (Jensen's inequality bias applies to the mean; a Duan smearing estimator
+  would be needed for an unbiased mean estimate).
+
+### 0.3 ln vs log10 — Mathematical Equivalence
+
+The two log bases are mathematically equivalent (spec §17, §18):
+
+```
+log10(x) = ln(x) / ln(10)
+```
+
+Therefore, for the same dataset:
+- `slope_log10 = slope_ln / ln(10)`
+- `intercept_log10 = intercept_ln / ln(10)`
+- Back-transformed predictions are identical (within floating-point tolerance)
+- R² is identical
+- Multiplicative factor `e^b_ln = 10^b_log10` (same value)
+
+The engine validates this equivalence with dedicated tests in
+`logRegression.test.ts`.
+
+### 0.4 Transformation Metadata Registry (spec §4)
+
+Every transformation is now defined in exactly one place:
+`TRANSFORMATION_REGISTRY`. Each entry provides:
+
+```ts
+type TransformationMetadata = {
+  type: TransformType;
+  name: string;
+  displayName: string;
+  notationLatex: string;       // KaTeX for forward transform
+  inverseNotationLatex: string;// KaTeX for inverse transform
+  domain: 'all-reals' | 'strictly-positive' | 'non-negative';
+  domainDescription: string;
+  forward: (x: number) => number;
+  inverse: (z: number) => number;
+  explanation: string;
+  preservesSign: boolean;
+  acceptsZero: boolean;
+  acceptsNegative: boolean;
+};
+```
+
+The log-regression engine, the UI, and the validation logic all consume this
+registry. Adding a new transformation requires updating only the registry.
+
+### 0.5 Domain Validation (spec §5, §25)
+
+Logarithmic transformations require Y > 0. The engine reports every offending
+row in a structured error (never silent NaNs, never silent filtering):
+
+```
+Log-linear regression (Natural Logarithm) cannot be calculated.
+
+The selected transformation requires Y > 0. Natural Logarithm is undefined
+for zero and negative values.
+
+Invalid observations (2 total):
+  Row 2: Y = 0 violates Natural Logarithm domain (Strictly positive (x > 0))
+  Row 4: Y = -1.5 violates Natural Logarithm domain (Strictly positive (x > 0))
+```
+
+### 0.6 Calculation Trace (spec §16)
+
+The engine generates an 11-step calculation trace, consumed verbatim by the UI:
+
+1. Raw data
+2. Transform Y → z = log(Y)
+3. Calculate means (x̄, z̄)
+4. Calculate deviations (xᵢ − x̄, zᵢ − z̄)
+5. Sxx = Σ(xᵢ − x̄)²
+6. Sxz = Σ(xᵢ − x̄)(zᵢ − z̄)
+7. Slope b = Sxz / Sxx
+8. Intercept a = z̄ − b·x̄
+9. Predicted transformed values ẑᵢ = a + b·xᵢ
+10. Transformed residuals eᵢ = zᵢ − ẑᵢ, SSE = Σeᵢ²
+11. Back-transform ŷᵢ = exp(ẑᵢ) or 10^(ẑᵢ)
+
+The trace is generated by the domain layer; React never reconstructs formulas.
+
+### 0.7 PK Compatibility (spec §22, §23)
+
+The log-regression engine does NOT compute PK-specific quantities (k, t½, Vd,
+CL, AUC). It exposes only the regression coefficients. The PK layer (Phase 2
+`pkRegression.ts`) consumes the slope and intercept to derive:
+
+| PK parameter | ln model | log10 model |
+|---|---|---|
+| Elimination rate k | `−slope` | `−slope × ln(10)` |
+| Initial concentration C₀ | `exp(intercept)` | `10^intercept` |
+| Half-life t½ | `ln(2) / k` | `ln(2) / k` |
+
+This separation keeps generic regression code free of PK-specific formulas.
+
+### 0.8 Unified Regression Dispatcher (spec §3)
+
+The `analyzeRegression()` function in `regressionAnalysis.ts` is the single
+entry point for both linear and log-linear modes. The UI never branches on
+regression type itself — it calls this dispatcher and renders the result.
+
+### 0.9 Phase 3 Test Suite
+
+```
+Test Files  7 passed (7)
+     Tests  245 passed (245)   ← 189 (Phase 2) + 56 (Phase 3)
+```
+
+The new `logRegression.test.ts` (56 tests) covers:
+- Transformation metadata registry (spec §4)
+- Log-linear regression on perfect mono-exponential data
+- ln vs log10 numerical equivalence (spec §18)
+- Regression equivalence: logRegression(ln) ≡ linearRegression(ln(Y)) (spec §19)
+- Domain validation (spec §5, §20)
+- Edge cases (n<2, n=2, constant X, constant Y, repeated X, empty, non-finite)
+- PK compatibility (spec §22, §23)
+- predictLogRegression (spec §11, §21)
+- No rounding inside the engine (spec §34)
+
+---
+
+# Phase 2 — Statistical Engine Audit & Hardening (preserved)
 
 ## 1. Architecture
 

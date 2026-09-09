@@ -111,6 +111,7 @@ export const PracticeModule: React.FC = () => {
               <option value="r-squared">R² & Fit</option>
               <option value="residuals">Residuals & Diagnostics</option>
               <option value="transformations">Log Transformations</option>
+              <option value="log-linear">Log-Linear Regression</option>
               <option value="pk">Pharmacokinetics</option>
             </select>
 

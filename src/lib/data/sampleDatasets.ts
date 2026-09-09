@@ -164,4 +164,41 @@ export const SAMPLE_DATASETS: DatasetPreset[] = [
     educationalNotes:
       'Gentamicin has predominantly renal elimination. With regular monitoring, calculating k and t1/2 allows adjusting dosage intervals to avoid nephrotoxicity while maintaining efficacy.',
   },
+  {
+    // Phase 3 (spec §30): Deterministic exponential decay dataset designed
+    // specifically to demonstrate log-linear regression. The ground-truth
+    // model is C(t) = 50 · e^(−0.25·t) with mild deterministic noise added
+    // (NOT random) so the dataset is reproducible across runs and tests.
+    //
+    // On the original scale, C vs t is a curved exponential decay.
+    // On the ln(C) vs t scale, the data is approximately linear with
+    // slope ≈ −0.25 and intercept ≈ ln(50) ≈ 3.912.
+    id: 'exponential-decay-demo',
+    name: '8. Exponential Decay (Log-Linear Demo): Drug Concentration vs Time',
+    category: 'pharmacokinetics',
+    description:
+      'Deterministic exponential decay C(t) = 50·e^(−0.25t) with mild reproducible noise. ' +
+      'Curved on the original scale, linear on the ln(C) scale. Designed for Phase 3 log-linear regression.',
+    xLabel: 'Time',
+    yLabel: 'Concentration',
+    xUnit: 'h',
+    yUnit: 'mg/L',
+    data: [
+      { x: 0, y: 50.0 },
+      { x: 1, y: 39.0 },   // exact: 38.94, +0.06 deterministic noise
+      { x: 2, y: 30.4 },   // exact: 30.33, +0.07
+      { x: 3, y: 23.7 },   // exact: 23.62, +0.08
+      { x: 4, y: 18.4 },   // exact: 18.39, +0.01
+      { x: 6, y: 11.2 },   // exact: 11.11, +0.09
+      { x: 8, y: 6.7 },    // exact: 6.74, -0.04
+      { x: 10, y: 4.1 },   // exact: 4.07, +0.03
+      { x: 12, y: 2.5 },   // exact: 2.47, +0.03
+      { x: 16, y: 0.92 },  // exact: 0.907, +0.013
+    ],
+    educationalNotes:
+      'Ground-truth model: C(t) = 50·e^(−0.25t). ' +
+      'On the original scale (C vs t) the data curves downward — a straight line over-predicts in the middle. ' +
+      'On the transformed scale (ln(C) vs t) the data is approximately linear with slope ≈ −0.25 and intercept ≈ ln(50) ≈ 3.912. ' +
+      'This is exactly the structure of first-order pharmacokinetic elimination: ln(C) = ln(C₀) − kt, so k ≈ 0.25 h⁻¹, t½ ≈ ln(2)/0.25 ≈ 2.77 h.',
+  },
 ];

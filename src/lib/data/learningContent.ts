@@ -399,4 +399,46 @@ export const LESSONS: Lesson[] = [
       'Educational use only: clinical dosing requires patient-specific clinical protocols.',
     ],
   },
+  // -------------------------------------------------------------------------
+  // Phase 3 (spec §28): "Why take the logarithm?" — focused log-linear
+  // regression lesson covering exponential relationships, linearization,
+  // ln vs log10, slope interpretation, back-transformation, residuals,
+  // and the PK elimination connection.
+  // -------------------------------------------------------------------------
+  {
+    id: 'why-take-the-logarithm',
+    number: 19,
+    title: 'Why Take the Logarithm? Linearizing Exponential Relationships',
+    category: 'transformations',
+    objective:
+      'Understand why logarithmic transformations convert exponential curves into straight lines, ' +
+      'and how to interpret the resulting log-linear regression coefficients on the original scale.',
+    summary:
+      'Logarithms convert multiplicative exponential relationships into additive linear relationships, ' +
+      'enabling ordinary least squares regression to fit exponential decay and growth models.',
+    content: [
+      'Many natural and pharmacological processes do not change by adding a constant amount per unit time — they change by multiplying by a constant ratio. Bacterial populations double every generation. Radioactive isotopes halve every half-life. Drug concentrations decay exponentially because the amount eliminated per hour is proportional to the amount currently in the body.',
+      'These processes follow the general exponential form Y = A · e^(bX), where A is the initial value, b is the rate constant, and X is the independent variable (often time). On a scatter plot of Y vs X, this produces a curved shape — sometimes a steep rise, sometimes a long decay tail. Ordinary least squares regression assumes a linear relationship Y = a + bX, so fitting a straight line to exponential data yields a poor fit with systematic curvature in the residuals.',
+      'The mathematical breakthrough is to take the logarithm of Y. Applying ln to both sides of Y = A · e^(bX) yields ln(Y) = ln(A) + bX. Suddenly the curved exponential relationship becomes a perfectly linear one, with intercept ln(A) and slope b. We can now apply ordinary least squares regression to the transformed pairs (X, ln Y) and recover the original exponential parameters.',
+      'The same trick works for base-10 logarithms: log10(Y) = log10(A) + (b / ln 10) · X. The slope on the log10 scale differs from the slope on the ln scale by a factor of 1 / ln(10) ≈ 0.4343, but the underlying exponential relationship is identical. Always verify which log base your software or textbook is using — confusing ln and log10 is a classic pharmacy student error.',
+      'Once we have the fitted equation ln(Y) = a + bX, we predict on the original scale by exponentiating: ŷ = e^(a + bX) = e^a · e^(bX). The intercept e^a is the predicted Y at X = 0, and e^b is the multiplicative factor by which Y changes for each one-unit increase in X. A slope of b = −0.15 in an ln model means Y is multiplied by e^(−0.15) ≈ 0.86 per unit X — roughly a 14% decrease per unit, not a 15% decrease.',
+      'Residual diagnostics must be performed on the transformed scale, because that is the scale on which OLS minimizes squared errors. A residual of e_i = ln(y_i) − ẑ_i is what the regression actually optimizes; the original-scale difference y_i − ŷ_i is informational only and should not be used for diagnostic plots.',
+      'In pharmacokinetics, this transformation is the foundation of first-order elimination modeling. The differential equation dC/dt = −kC integrates to C(t) = C₀ · e^(−kt). Taking ln of both sides gives ln(C) = ln(C₀) − kt, which is exactly the linear form ln(Y) = a + bX with slope b = −k and intercept a = ln(C₀). The elimination rate constant k = −slope, and the initial concentration C₀ = e^(intercept).',
+    ],
+    formulaLatex: 'Y = A e^{bX} \\;\\xrightarrow{\\ln}\\; \\ln(Y) = \\ln(A) + bX',
+    formulaMeaning:
+      'Logarithm of an exponential function produces a linear function — ' +
+      'the foundation of log-linear regression and PK elimination analysis.',
+    keyTakeaways: [
+      'Logarithms linearize exponential curves: Y = A·e^(bX) ⇒ ln(Y) = ln(A) + bX.',
+      'ln uses base e (slope = b); log10 uses base 10 (slope = b / ln(10) ≈ b / 2.303).',
+      'Back-transform via exp (for ln) or 10^x (for log10) to recover original-scale predictions.',
+      'Slope interpretation is multiplicative: a slope b in ln(Y) means Y is multiplied by e^b per unit X.',
+      'R² and residuals are computed on the transformed scale; do not compare them to raw-Y R².',
+      'PK connection: ln(C) = ln(C₀) − kt gives k = −slope and C₀ = e^(intercept).',
+    ],
+    interactiveTip:
+      'Visit the Transformations tab and load the "Exponential Decay (Log-Linear Demo)" dataset. ' +
+      'Toggle between Original Scale (curved) and Transformed Scale (linear) to see the linearization in action.',
+  },
 ];
