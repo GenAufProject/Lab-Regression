@@ -1,12 +1,187 @@
 # Regression Lab — Statistical Engine Documentation
 
-> **Phase 4 scope**: build a comprehensive, regression-based pharmacokinetics
-> analysis engine on top of the Phase 2/3 infrastructure. The PK engine
-> reuses the validated OLS engine via `analyzePKData` (no duplicate math —
-> spec §6). Adds trapezoidal AUC, AUC extrapolation, terminal-phase
-> selection, prediction tables, calculation trace, educational
-> interpretation, and a centralized unit registry. Phase 1-3 content is
-> preserved; this README is additive.
+> **Phase 5 scope**: build an interactive educational layer on top of the
+> Phase 2-4 scientific engines. The learning system reuses the existing
+> OLS, transformation, and PK engines — no duplicate math (spec §27).
+> Adds structured lessons, guided calculation, practice questions with
+> mistake explanations, progress tracking, and a searchable formula
+> reference. Phase 1-4 content is preserved; this README is additive.
+
+## 0. Phase 5 — Learning & Interactive Education Engine
+
+### 0.1 What was added
+
+```
+src/lib/learning/
+  lessonEngine.ts            ← lesson loading + navigation + validation
+  practiceEngine.ts          ← answer validation + mistake classification
+  mistakeEngine.ts           ← structured mistake explanations (11 categories)
+  progressStore.ts           ← localStorage-backed progress tracking
+  guidedCalculation.ts       ← 10-step OLS trace (reuses Phase 2 engine)
+  guidedPKCalculation.ts     ← 11-step PK trace (reuses Phase 4 engine)
+  __tests__/learning.test.ts ← 62 tests
+
+src/data/
+  lessons/index.ts           ← 22 structured lessons across 5 modules
+  lessons/modules.ts         ← 5 learning modules (A-E)
+  questions/index.ts         ← 20 expanded practice questions (V2)
+
+src/components/learning/
+  LearningCenter.tsx         ← structured lesson browser
+  LessonViewer.tsx           ← section-by-section navigation + inline questions
+  GuidedCalculation.tsx      ← progressive-disclosure 10-step OLS viewer
+  PracticeQuestion.tsx       ← submit/explain/retry UX with mistake engine
+  FormulaReference.tsx       ← searchable formula library (28 formulas)
+  LearningDashboard.tsx      ← progress + continue + recommendations
+  MasteryIndicator.tsx       ← per-topic progress bars
+
+src/App.tsx                  ← + Dashboard nav section, new learn/practice/reference views
+src/types.ts                 ← + 11 new types (StructuredLesson, LearningMistake, etc.)
+```
+
+### 0.2 Architecture (spec §3, §24, §27)
+
+```
+UI (learning components)
+  ↓
+Learning engines (lessonEngine, practiceEngine, mistakeEngine, progressStore)
+  ↓
+Guided calculation (guidedCalculation, guidedPKCalculation)
+  ↓
+Existing scientific engines (Phase 2 OLS, Phase 4 PK) — NO DUPLICATE MATH
+```
+
+CRITICAL INVARIANT (spec §27): The guided calculation engines CONSUME the
+Phase 2 `RegressionStatistics` and Phase 4 `PKAnalysisSuccess` objects —
+they do NOT re-implement OLS or PK math. Cross-engine validation tests
+prove the guided trace values match the engine outputs exactly.
+
+### 0.3 Learning Modules (spec §1)
+
+| Module | Title | Lessons | Category |
+|---|---|---|---|
+| A | Regression Fundamentals | 4 | regression-fundamentals |
+| B | Understanding OLS | 4 | ols |
+| C | Regression Diagnostics | 4 | diagnostics |
+| D | Transformations | 4 | transformations |
+| E | Pharmacokinetics | 7 | pk |
+
+Total: 22 structured lessons, each with objectives, sections (text/formula/
+example/interactive/question), and key takeaways.
+
+### 0.4 Guided Calculation (spec §3, §4, §11)
+
+**OLS Guided Calculation** (10 steps):
+1. Calculate means (x̄, ȳ)
+2. Calculate deviations
+3. Calculate Sxy and Sxx
+4. Calculate slope (b₁ = Sxy/Sxx)
+5. Calculate intercept (b₀ = ȳ − b₁x̄)
+6. Construct regression equation
+7. Calculate predictions
+8. Calculate residuals
+9. Calculate SSE / SST / R²
+10. Interpretation
+
+**PK Guided Calculation** (11 steps):
+1. Validate concentration data
+2. Transform C → ln(C)
+3. Fit OLS regression
+4. Identify slope/intercept
+5. Derive k
+6. Estimate C₀
+7. Calculate half-life
+8. Calculate predicted concentrations
+9. Calculate residuals
+10. Calculate AUC
+11. Interpret
+
+Progressive disclosure: Next / Previous / Show all / Restart. Each step has
+a progress indicator (Step 4 of 10, progress bar).
+
+### 0.5 Practice System (spec §12, §13, §14)
+
+20 practice questions across 5 types:
+- **Conceptual** (Type A) — meaning of slope, R², correlation
+- **Calculation** (Type B) — compute slope from Sxy/Sxx, predict Y, residual
+- **Interpretation** (Type C) — read residual patterns, intercept extrapolation
+- **PK** (Type D) — k from slope, half-life, C₀, log10 conversion
+- **Error identification** (Type E) — find the student's mistake
+
+Each question includes:
+- `mistakeCategory` — for context-sensitive mistake explanation
+- `hint` — shown after the first incorrect attempt
+- `difficulty` + `type` — for filtering
+
+**Mistake Explanation System** (spec §14): 11 categories with structured
+explanations (label, explanation, correct principle). When a learner
+submits an incorrect answer, the UI shows "Not quite." + the question
+explanation + the mistake-category explanation + the hint.
+
+### 0.6 Progress Tracking (spec §18, §19)
+
+Lightweight localStorage-backed tracking (no backend, no cloud — spec §30):
+- Completed lessons
+- Completed practice questions
+- Per-topic scores (0-100%)
+- Total correct / total attempted
+- Last activity timestamp
+
+**Mastery indicator** (spec §19): simple transparent progress bars per topic.
+NOT a scientifically validated competency measure.
+
+### 0.7 Formula Reference (spec §16)
+
+Searchable, categorized library of 28 formulas across 4 sections:
+- Regression (12 formulas: equation, slope, intercept, R², SSE, SST, RSE,
+  SE(b), CI, PI, leverage, Cook's D)
+- Transformations (5 formulas: ln, log10, change-of-base, back-transforms)
+- Pharmacokinetics (8 formulas: decay, linearization, k, t½, C₀, Vd, CL)
+- AUC (4 formulas: trapezoidal, extrapolation, total, theoretical)
+
+Only formulas actually computed by the engine are listed (spec §16).
+
+### 0.8 Phase 5 Test Suite
+
+```
+Test Files  9 passed (9)
+     Tests  375 passed (375)   ← 313 (Phase 1-4) + 62 (Phase 5)
+```
+
+The new `learning.test.ts` (62 tests) covers:
+- Lesson engine: loading, navigation, recommendations, validation
+- Practice engine: answer validation, mistake classification, hints
+- Mistake engine: all 11 categories, structured explanations
+- Progress store: save/load, corruption handling, mastery calculation
+- Guided OLS calculation: 10 steps, cross-engine value match (spec §27)
+- Guided PK calculation: 11 steps, cross-engine value match (spec §27)
+- R² interpretation caveat verified in PK interpretation step (spec §10)
+
+### 0.9 How to Add a New Lesson
+
+1. Add a new `StructuredLesson` object to `src/data/lessons/index.ts`
+2. Add its ID to the appropriate module's `lessonIds` in `src/data/lessons/modules.ts`
+3. Run `validateLesson()` in tests to catch data-entry errors
+4. The lesson automatically appears in the Learning Center
+
+### 0.10 How to Add a New Practice Question
+
+1. Add a new `PracticeQuestionV2` object to `src/data/questions/index.ts`
+2. Set `mistakeCategory` to the most relevant category from `LearningMistake`
+3. Optionally add a `hint`
+4. Run `validatePracticeQuestion()` in tests to verify structure
+
+### 0.11 Limitations (intentionally deferred per spec §30)
+
+- No user accounts / backend / cloud progress
+- No LMS integration / certificates / social features
+- No AI tutor / adaptive learning
+- No population PK / nonlinear mixed effects (Phase 4 limitation)
+- Mastery indicator is educational only, not validated competency
+
+---
+
+# Phase 4 — Pharmacokinetics Analysis Engine (preserved)
 
 ## 0. Phase 4 — Pharmacokinetics Analysis Engine
 
@@ -183,16 +358,17 @@ Non-fatal warnings (return `PKWarning[]` on success):
 
 ```
 Test Files  8 passed (8)
-     Tests  306 passed (306)   ← 245 (Phase 1-3) + 61 (Phase 4)
+     Tests  313 passed (313)   ← 245 (Phase 1-3) + 68 (Phase 4)
 ```
 
-The new `pkAnalysis.test.ts` (61 tests) covers:
+The new `pkAnalysis.test.ts` (68 tests) covers:
 - First-order regression on synthetic data (spec §24)
 - ln vs log10 equivalence (spec §7)
 - Prediction (spec §11)
 - Trapezoidal AUC (spec §13)
 - AUC extrapolation (spec §14)
 - Terminal-phase selection (spec §15)
+- **Terminal-phase selection drives the regression (audit fix)** — verifies that `best-rsquared-suffix` actually changes k vs `all-points`, that `olsStatistics.n` equals the terminal point count, and that input is not mutated
 - PK calculation trace (spec §17)
 - Cross-validation with regression engine (spec §25)
 - Validation & error handling (spec §5, §22, §29)
@@ -200,6 +376,7 @@ The new `pkAnalysis.test.ts` (61 tests) covers:
 - Unit handling (spec §18)
 - No rounding inside the engine (spec §26, §34)
 - Regression safety — Phase 1-3 functionality intact (spec §33)
+- AUC hand-calculation verification (spec §17 textbook example: [(0,10),(1,20)] → AUC=15)
 
 ### 0.12 Sample Datasets (spec §23)
 

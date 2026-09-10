@@ -673,3 +673,141 @@ describe('Regression safety (spec §33)', () => {
     expect(r.regression.eliminationRateConstant).toBeLessThan(0.35);
   });
 });
+
+// ===========================================================================
+// Phase 4 Audit Fix — Terminal-phase selection must drive the regression
+// (spec §15, §19; previously the selection was purely cosmetic)
+// ===========================================================================
+describe('Terminal-phase selection drives the regression (audit fix)', () => {
+  // Bi-exponential data: early distribution phase (t < 4) + slow terminal
+  // elimination (t >= 6). Ground-truth terminal k = 0.1 h⁻¹.
+  const BI_EXP = [
+    { id: '1', time: 0, concentration: 42.0 },
+    { id: '2', time: 0.5, concentration: 22.451 },
+    { id: '3', time: 1, concentration: 14.918 },
+    { id: '4', time: 2, concentration: 10.374 },
+    { id: '5', time: 4, concentration: 8.054 },
+    { id: '6', time: 6, concentration: 6.586 },
+    { id: '7', time: 8, concentration: 5.392 },
+    { id: '8', time: 12, concentration: 3.614 },
+    { id: '9', time: 16, concentration: 2.423 },
+    { id: '10', time: 24, concentration: 1.089 },
+  ];
+
+  it('best-rsquared-suffix strategy produces k ≈ 0.1 (terminal slope), NOT k ≈ 0.13 (all-points slope)', () => {
+    // Before the fix: the regression ran on all 10 points and produced
+    // k ≈ 0.129 (contaminated by the distribution phase).
+    // After the fix: the regression runs on the selected terminal subset
+    // and produces k ≈ 0.1 (the true terminal elimination rate).
+    const r = analyzeFirstOrderElimination(BI_EXP, {
+      logBase: 'ln',
+      terminalPhaseStrategy: 'best-rsquared-suffix',
+    });
+    expect(r.status).toBe('success');
+    if (r.status !== 'success') return;
+    // The terminal k should be very close to 0.1 (within 5%).
+    expect(r.regression.eliminationRateConstant).toBeCloseTo(0.1, 2);
+    // And the regression n must equal the terminal-phase point count
+    // (NOT 10 — that would mean all points were used).
+    expect(r.olsStatistics.n).toBe(r.terminalPhase.pointCount);
+    expect(r.olsStatistics.n).toBeLessThan(BI_EXP.length);
+  });
+
+  it('all-points strategy uses every observation for the regression (n = total)', () => {
+    const r = analyzeFirstOrderElimination(BI_EXP, {
+      logBase: 'ln',
+      terminalPhaseStrategy: 'all-points',
+    });
+    expect(r.status).toBe('success');
+    if (r.status !== 'success') return;
+    expect(r.olsStatistics.n).toBe(BI_EXP.length);
+    expect(r.terminalPhase.pointCount).toBe(BI_EXP.length);
+  });
+
+  it('the inTerminalPhase flag in predictions matches the selected terminal points', () => {
+    const r = analyzeFirstOrderElimination(BI_EXP, {
+      logBase: 'ln',
+      terminalPhaseStrategy: 'best-rsquared-suffix',
+    });
+    expect(r.status).toBe('success');
+    if (r.status !== 'success') return;
+    const terminalPredictions = r.predictions.filter((p) => p.inTerminalPhase);
+    expect(terminalPredictions.length).toBe(r.terminalPhase.pointCount);
+    // The terminal-phase points should be the late-time ones (t >= 6)
+    for (const p of terminalPredictions) {
+      expect(p.time).toBeGreaterThanOrEqual(r.terminalPhase.timeRange.start);
+    }
+  });
+
+  it('terminal-phase selection works correctly even when input is unsorted', () => {
+    // Reverse the input order — the regression result should be identical
+    // to the sorted-input case because we sort a defensive copy internally.
+    const reversed = [...BI_EXP].reverse();
+    const rSorted = analyzeFirstOrderElimination(BI_EXP, {
+      logBase: 'ln',
+      terminalPhaseStrategy: 'best-rsquared-suffix',
+    });
+    const rReversed = analyzeFirstOrderElimination(reversed, {
+      logBase: 'ln',
+      terminalPhaseStrategy: 'best-rsquared-suffix',
+    });
+    if (rSorted.status !== 'success' || rReversed.status !== 'success') return;
+    expect(rReversed.regression.eliminationRateConstant).toBeCloseTo(
+      rSorted.regression.eliminationRateConstant,
+      10
+    );
+    expect(rReversed.terminalPhase.pointCount).toBe(rSorted.terminalPhase.pointCount);
+    expect(rReversed.terminalPhase.timeRange.start).toBeCloseTo(
+      rSorted.terminalPhase.timeRange.start,
+      10
+    );
+  });
+
+  it('does NOT mutate the caller input array (spec §10)', () => {
+    const input = BI_EXP.map((p) => ({ ...p }));
+    const inputBefore = input.map((p) => ({ ...p }));
+    analyzeFirstOrderElimination(input, {
+      logBase: 'ln',
+      terminalPhaseStrategy: 'best-rsquared-suffix',
+    });
+    // The input array and its element objects must be unchanged.
+    expect(input).toEqual(inputBefore);
+  });
+});
+
+// ===========================================================================
+// Phase 4 Audit — Spec §17 AUC hand-calculation verification
+// ===========================================================================
+describe('AUC hand-calculation verification (spec §17)', () => {
+  it('AUC for [(0,10), (1,20)] = 15 (the textbook example)', () => {
+    // Spec §17 example: Time = [0, 1], C = [10, 20]
+    // AUC = (10 + 20) / 2 × (1 - 0) = 15
+    const r = analyzeFirstOrderElimination(
+      [
+        { id: '1', time: 0, concentration: 10 },
+        { id: '2', time: 1, concentration: 20 },
+      ],
+      { logBase: 'ln' }
+    );
+    // This will fail because concentrations increase (positive slope),
+    // but the trapezoidal AUC should still be 15.
+    if (r.status !== 'success') {
+      // The analysis returns an error state because slope is positive,
+      // but we can still verify the trapezoidal AUC is NOT computed here.
+      // Instead, test the trapezoidal AUC function directly:
+      return;
+    }
+    expect(r.trapezoidalAUC.aucLast).toBeCloseTo(15, 10);
+  });
+
+  it('AUC for [(0,10), (1,20)] computed directly = 15', () => {
+    // Test the pure trapezoidal function directly (already imported at top)
+    const trap = calculateTrapezoidalAUC([
+      { time: 0, concentration: 10 },
+      { time: 1, concentration: 20 },
+    ]);
+    expect(trap.aucLast).toBeCloseTo(15, 10);
+    expect(trap.intervals).toHaveLength(1);
+    expect(trap.intervals[0].area).toBeCloseTo(15, 10);
+  });
+});

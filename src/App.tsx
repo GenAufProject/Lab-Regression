@@ -11,6 +11,7 @@ import {
   FlaskConical,
   GraduationCap,
   Layers,
+  LayoutDashboard,
   Settings2,
   Sliders,
   TrendingUp,
@@ -29,11 +30,15 @@ import { InterpretationCards } from './components/regression/InterpretationCards
 import { TransformationModule } from './components/transformations/TransformationModule';
 import { RegressionPlayground } from './components/simulator/RegressionPlayground';
 import { PKWorkspace } from './components/pk/PKWorkspace';
-import { LearningCenter } from './components/learn/LearningCenter';
-import { PracticeModule } from './components/practice/PracticeModule';
-import { ReferencePage } from './components/reference/ReferencePage';
+import { LearningCenter as NewLearningCenter } from './components/learning/LearningCenter';
+import { LearningDashboard } from './components/learning/LearningDashboard';
+import { PracticeQuestion } from './components/learning/PracticeQuestion';
+import { FormulaReference as NewFormulaReference } from './components/learning/FormulaReference';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { EducationalDisclaimer } from './components/common/EducationalDisclaimer';
+import { PRACTICE_QUESTIONS_V2 } from './data/questions';
+import { loadProgress, markQuestionCompleted, saveProgress } from './lib/learning/progressStore';
+import { LearningProgress } from './types';
 
 // Default initial dataset: Calibration Curve
 const DEFAULT_PRESET = SAMPLE_DATASETS[0];
@@ -130,13 +135,17 @@ export default function App() {
 
   const stats = regressionResult.status === 'success' ? regressionResult.stats : null;
 
-  // Navigation Items
+  // Navigation Items — Phase 5: 'learn' now shows the new structured LearningCenter,
+  // 'dashboard' shows the LearningDashboard, 'reference' shows the new FormulaReference,
+  // and 'practice' shows the new PracticeQuestion (V2). The old components are preserved
+  // but no longer wired to the main nav.
   const navItems: { id: AppNavSection; label: string; icon: React.ReactNode }[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
+    { id: 'learn', label: 'Lessons', icon: <BookOpen size={16} /> },
     { id: 'regression', label: 'Regression Lab', icon: <TrendingUp size={16} /> },
     { id: 'transformations', label: 'Transformations', icon: <Binary size={16} /> },
     { id: 'simulator', label: 'Simulator', icon: <Sliders size={16} /> },
     { id: 'pk', label: 'PK Studio', icon: <FlaskConical size={16} /> },
-    { id: 'learn', label: 'Lessons', icon: <BookOpen size={16} /> },
     { id: 'practice', label: 'Practice', icon: <Award size={16} /> },
     { id: 'reference', label: 'Formulas', icon: <FileText size={16} /> },
     { id: 'settings', label: 'Settings', icon: <Settings2 size={16} /> },
@@ -305,16 +314,18 @@ export default function App() {
         {/* VIEW 4: PHARMACOKINETICS WORKSPACE */}
         {activeSection === 'pk' && <PKWorkspace />}
 
-        {/* VIEW 5: LEARNING CENTER */}
+        {/* VIEW 5: LEARNING CENTER (Phase 5 — structured lessons) */}
         {activeSection === 'learn' && (
-          <LearningCenter onNavigateToSection={setActiveSection} />
+          <NewLearningCenter onNavigateSection={(s) => setActiveSection(s as AppNavSection)} />
         )}
 
-        {/* VIEW 6: PRACTICE MODE */}
-        {activeSection === 'practice' && <PracticeModule />}
+        {/* VIEW 6: PRACTICE MODE (Phase 5 — PracticeQuestion V2) */}
+        {activeSection === 'practice' && (
+          <PracticeCarousel />
+        )}
 
-        {/* VIEW 7: FORMULA REFERENCE */}
-        {activeSection === 'reference' && <ReferencePage />}
+        {/* VIEW 7: FORMULA REFERENCE (Phase 5 — searchable) */}
+        {activeSection === 'reference' && <NewFormulaReference />}
 
         {/* VIEW 8: SETTINGS */}
         {activeSection === 'settings' && (
@@ -322,6 +333,18 @@ export default function App() {
             preferences={preferences}
             onUpdatePreferences={handleUpdatePreferences}
             onResetPreferences={handleResetPreferences}
+          />
+        )}
+
+        {/* VIEW 9: LEARNING DASHBOARD (Phase 5) */}
+        {activeSection === 'dashboard' && (
+          <LearningDashboard
+            onNavigateLesson={(lessonId) => {
+              setActiveSection('learn');
+              // The LearningCenter will pick up the lesson via its initial state;
+              // for simplicity we just navigate to the lessons tab.
+            }}
+            onNavigateSection={(s) => setActiveSection(s as AppNavSection)}
           />
         )}
       </main>
@@ -339,6 +362,60 @@ export default function App() {
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Phase 5 — Practice Carousel (inline component)
+//
+// Wraps the PracticeQuestion V2 component with question navigation and
+// progress tracking. Uses the progress store to persist scores.
+// ===========================================================================
+function PracticeCarousel() {
+  const [idx, setIdx] = useState(0);
+  const [progress, setProgress] = useState<LearningProgress>(() => loadProgress());
+
+  const questions = PRACTICE_QUESTIONS_V2;
+  const q = questions[idx];
+  const isLast = idx === questions.length - 1;
+
+  const handleAnswered = (questionId: string, isCorrect: boolean) => {
+    const updated = markQuestionCompleted(progress, questionId, q.category, isCorrect);
+    setProgress(updated);
+    saveProgress(updated);
+  };
+
+  const handleNext = () => {
+    if (!isLast) setIdx((i) => i + 1);
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-4">
+      <div className="bg-white border border-neutral-200/80 rounded-xl p-4 shadow-xs">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-mono text-neutral-500">
+            Question {idx + 1} of {questions.length}
+          </span>
+          <span className="font-mono font-semibold text-teal-800">
+            Score: {progress.totalCorrect} / {progress.totalAttempted}
+          </span>
+        </div>
+        <div className="mt-2 bg-neutral-100 rounded-full h-1.5 overflow-hidden">
+          <div
+            className="bg-teal-600 h-full transition-all"
+            style={{ width: `${((idx + 1) / questions.length) * 100}%` }}
+          />
+        </div>
+      </div>
+      {q && (
+        <PracticeQuestion
+          question={q}
+          onAnswered={handleAnswered}
+          onNext={handleNext}
+          isLast={isLast}
+        />
+      )}
     </div>
   );
 }

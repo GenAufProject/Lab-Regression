@@ -163,25 +163,43 @@ export function analyzeFirstOrderElimination(
   // ----------------------------------------------------------------
   // Step 2: Terminal-phase selection (spec §15)
   // ----------------------------------------------------------------
-  const terminalPhase: TerminalPhase = selectTerminalPhase(validData, {
+  // Sort a defensive copy by time so terminal-phase suffix selection is
+  // correct even when the user's input is not in ascending order. The
+  // original `validData` order is preserved for the predictions table
+  // (which follows user input order); only the regression subset uses
+  // the sorted order. We never mutate the caller's array.
+  const timeSortedValidData: PKObservation[] = [...validData].sort(
+    (a, b) => a.time - b.time
+  );
+
+  const terminalPhase: TerminalPhase = selectTerminalPhase(timeSortedValidData, {
     strategy: terminalPhaseStrategy,
     minPoints: minTerminalPoints,
     logBase,
   });
 
   // ----------------------------------------------------------------
-  // Step 3: Delegate to Phase 2 analyzePKData for the regression
+  // Step 3: Delegate to Phase 2 analyzePKData for the regression.
+  //
+  // CRITICAL FIX (spec §15, §19): the regression MUST run on the
+  // terminal-phase subset, NOT on all valid data. Previously the terminal-
+  // phase selection was purely cosmetic — the selector picked points but
+  // the regression ignored them, producing misleading k/t½/C₀ values for
+  // bi-exponential or absorption-phase data.
+  //
+  // We map the selected indices (which refer to timeSortedValidData) back
+  // to the actual observations and pass ONLY those to analyzePKData.
   // ----------------------------------------------------------------
-  // Convert validData to PKDataPoint for backward compatibility with
-  // the Phase 2 API.
-  const pkDataPoints: PKDataPoint[] = validData.map((p) => ({
-    id: p.id,
-    time: p.time,
-    concentration: p.concentration,
-  }));
+  const terminalData: PKDataPoint[] = terminalPhase.selectedIndices.map(
+    (idx) => ({
+      id: timeSortedValidData[idx].id,
+      time: timeSortedValidData[idx].time,
+      concentration: timeSortedValidData[idx].concentration,
+    })
+  );
 
   const phase2Result = analyzePKData(
-    pkDataPoints,
+    terminalData,
     logBase,
     units,
     dose && dose > 0 ? dose : undefined
@@ -218,8 +236,15 @@ export function analyzeFirstOrderElimination(
   // ----------------------------------------------------------------
   // Step 5: Per-observation predictions and residuals (spec §11, §12)
   // ----------------------------------------------------------------
-  const selectedSet = new Set(terminalPhase.selectedIndices);
-  const predictions: PKPredictionRow[] = validData.map((pt, idx) => {
+  // Build a set of selected observation IDs (NOT indices) so the
+  // `inTerminalPhase` flag is correct regardless of input ordering.
+  // The terminalPhase.selectedIndices refer to timeSortedValidData; we
+  // map them to ids so the predictions table (which iterates the original
+  // validData order) marks the right rows.
+  const selectedIds = new Set(
+    terminalPhase.selectedIndices.map((idx) => timeSortedValidData[idx].id)
+  );
+  const predictions: PKPredictionRow[] = validData.map((pt) => {
     const zObserved =
       logBase === 'ln' ? Math.log(pt.concentration) : Math.log10(pt.concentration);
     const zPredicted = regression.intercept + regression.slope * pt.time;
@@ -234,7 +259,7 @@ export function analyzeFirstOrderElimination(
       concentrationPredicted: yPredicted,
       residualTransformed: zObserved - zPredicted,
       residualOriginal: pt.concentration - yPredicted,
-      inTerminalPhase: selectedSet.has(idx),
+      inTerminalPhase: selectedIds.has(pt.id),
     };
   });
 

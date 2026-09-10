@@ -635,3 +635,209 @@ export type AppNavSection =
   | 'practice'
   | 'reference'
   | 'settings';
+
+// ===========================================================================
+// Phase 5 — Learning & Interactive Education Engine types (spec §2, §14, §18)
+// ===========================================================================
+
+/**
+ * Phase 5: Structured lesson category (spec §1).
+ * Maps to the five learning modules A-E.
+ */
+export type LessonCategory = 'regression-fundamentals' | 'ols' | 'diagnostics' | 'transformations' | 'pk';
+
+/**
+ * Phase 5: Difficulty levels for lessons and practice questions.
+ */
+export type LessonDifficulty = 'beginner' | 'intermediate' | 'advanced';
+
+/**
+ * Phase 5: A single section within a structured lesson (spec §2).
+ *
+ * Lessons are data-driven — each section is one of:
+ *   - 'text'       : prose explanation
+ *   - 'formula'    : KaTeX formula + explanation
+ *   - 'example'    : worked example (optionally tied to a sample dataset)
+ *   - 'interactive': embedded interactive component (by componentId)
+ *   - 'question'   : inline practice question
+ *
+ * This discriminated union enables type-safe rendering in LessonViewer.
+ */
+export type LessonSection =
+  | { type: 'text'; title: string; content: string }
+  | { type: 'formula'; title: string; formula: string; explanation: string }
+  | { type: 'example'; title: string; datasetId?: string; explanation: string }
+  | { type: 'interactive'; title: string; componentId: string }
+  | {
+      type: 'question';
+      title: string;
+      question: string;
+      options: string[];
+      correctAnswer: number;
+      explanation: string;
+      mistakeCategory?: LearningMistake;
+    };
+
+/**
+ * Phase 5: A structured lesson (spec §2).
+ *
+ * Lessons are composed of sections and can be navigated sequentially.
+ * The LessonViewer renders each section type with appropriate formatting.
+ */
+export type StructuredLesson = {
+  id: string;
+  title: string;
+  description: string;
+  category: LessonCategory;
+  module: 'A' | 'B' | 'C' | 'D' | 'E';
+  difficulty: LessonDifficulty;
+  estimatedMinutes?: number;
+  objectives: string[];
+  sections: LessonSection[];
+  keyTakeaways: string[];
+};
+
+/**
+ * Phase 5: A learning module (spec §1) — a collection of lessons.
+ */
+export type LearningModule = {
+  id: string;
+  letter: 'A' | 'B' | 'C' | 'D' | 'E';
+  title: string;
+  description: string;
+  category: LessonCategory;
+  lessonIds: string[];
+};
+
+/**
+ * Phase 5: Structured mistake categories (spec §14).
+ *
+ * Used by the mistake engine to provide context-sensitive explanations
+ * when a learner submits an incorrect answer.
+ */
+export type LearningMistake =
+  | 'wrong-sign'
+  | 'wrong-transformation'
+  | 'wrong-formula'
+  | 'wrong-interpretation'
+  | 'rounding-too-early'
+  | 'domain-error'
+  | 'unit-error'
+  | 'r2-misinterpretation'
+  | 'pk-slope-sign'
+  | 'conceptual'
+  | 'calculation';
+
+/**
+ * Phase 5: An expanded practice question (spec §12, §13, §14).
+ *
+ * Extends the existing QuizQuestion with:
+ *   - mistakeCategory (for mistake-engine explanation)
+ *   - hint (optional, shown after first incorrect attempt)
+ *   - difficulty
+ *   - estimatedMinutes
+ *
+ * The existing QuizQuestion type is kept for backward compatibility;
+ * new Phase 5 questions use this richer type.
+ */
+export type PracticeQuestionV2 = {
+  id: string;
+  category: LessonCategory | 'general';
+  type: 'conceptual' | 'calculation' | 'interpretation' | 'pk' | 'error-identification';
+  difficulty: LessonDifficulty;
+  title: string;
+  prompt: string;
+  options: { id: string; text: string; isCorrect: boolean }[];
+  explanation: string;
+  /** Mistake category for the most-common wrong answer (spec §14). */
+  mistakeCategory?: LearningMistake;
+  /** Optional hint shown after the first incorrect attempt. */
+  hint?: string;
+  formulaNote?: string;
+  estimatedMinutes?: number;
+};
+
+/**
+ * Phase 5: Result of validating a practice answer (spec §13, §14).
+ *
+ * The practice engine returns a structured result so the UI can show
+ * "Not quite" + the conceptual explanation + the mistake category,
+ * rather than just "Wrong".
+ */
+export type PracticeAnswerResult = {
+  isCorrect: boolean;
+  /** Index of the selected option. */
+  selectedIndex: number;
+  /** Index of the correct option. */
+  correctIndex: number;
+  /** The explanation string (from the question). */
+  explanation: string;
+  /** The mistake category (if the question has one and the answer is wrong). */
+  mistakeCategory?: LearningMistake;
+  /** Context-sensitive mistake explanation (from the mistake engine). */
+  mistakeExplanation?: string;
+  /** Whether to show the hint on retry. */
+  showHint: boolean;
+  /** The hint text (if any). */
+  hint?: string;
+};
+
+/**
+ * Phase 5: Learning progress persisted to localStorage (spec §18).
+ *
+ * Tracking is lightweight and transparent — it is NOT a scientifically
+ * validated competency measure (spec §19).
+ */
+export type LearningProgress = {
+  /** IDs of completed lessons. */
+  completedLessons: string[];
+  /** IDs of completed practice questions (answered correctly at least once). */
+  completedQuestions: string[];
+  /** Per-topic scores: { 'regression-fundamentals': 0.8, ... } in [0, 1]. */
+  topicScores: Partial<Record<LessonCategory, number>>;
+  /** Total questions answered correctly. */
+  totalCorrect: number;
+  /** Total questions attempted. */
+  totalAttempted: number;
+  /** ISO timestamp of last activity. */
+  lastActivityAt?: string;
+};
+
+/**
+ * Phase 5: A single step in a guided calculation (spec §3, §4).
+ *
+ * The guided calculation engine (lib/learning/guidedCalculation.ts) produces
+ * a sequence of GuidedStep objects by consuming the existing Phase 2
+ * regression engine's RegressionStatistics. The UI reveals them one at a
+ * time with progressive disclosure.
+ */
+export type GuidedStep = {
+  step: number;
+  title: string;
+  description: string;
+  /** KaTeX formula string with full-precision values (no rounding). */
+  formulaLatex: string;
+  /** Short human-readable result summary. */
+  result: string;
+  /** Optional per-observation table data for this step. */
+  table?: {
+    headers: string[];
+    rows: (string | number)[][];
+  };
+};
+
+/**
+ * Phase 5: A guided calculation trace (spec §3, §4, §11).
+ *
+ * Produced by consuming the existing Phase 2 RegressionStatistics
+ * (for OLS guided calculation) or Phase 4 PKAnalysisSuccess (for PK
+ * guided calculation). No duplicate math.
+ */
+export type GuidedCalculationTrace = {
+  steps: GuidedStep[];
+  totalSteps: number;
+  /** The dataset the trace was generated from (for display). */
+  sourceDatasetLabel?: string;
+  /** The regression engine result that produced this trace. */
+  engineResultType: 'ols' | 'pk';
+};
