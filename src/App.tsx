@@ -36,6 +36,7 @@ import { PracticeQuestion } from './components/learning/PracticeQuestion';
 import { FormulaReference as NewFormulaReference } from './components/learning/FormulaReference';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { EducationalDisclaimer } from './components/common/EducationalDisclaimer';
+import { AnalysisWorkspace } from './components/analysis/AnalysisWorkspace';
 import { PRACTICE_QUESTIONS_V2 } from './data/questions';
 import { loadProgress, markQuestionCompleted, saveProgress } from './lib/learning/progressStore';
 import { LearningProgress } from './types';
@@ -143,6 +144,7 @@ export default function App() {
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} /> },
     { id: 'learn', label: 'Lessons', icon: <BookOpen size={16} /> },
     { id: 'regression', label: 'Regression Lab', icon: <TrendingUp size={16} /> },
+    { id: 'analysis', label: 'Analysis', icon: <BarChart2 size={16} /> },
     { id: 'transformations', label: 'Transformations', icon: <Binary size={16} /> },
     { id: 'simulator', label: 'Simulator', icon: <Sliders size={16} /> },
     { id: 'pk', label: 'PK Studio', icon: <FlaskConical size={16} /> },
@@ -341,11 +343,26 @@ export default function App() {
           <LearningDashboard
             onNavigateLesson={(lessonId) => {
               setActiveSection('learn');
-              // The LearningCenter will pick up the lesson via its initial state;
-              // for simplicity we just navigate to the lessons tab.
             }}
             onNavigateSection={(s) => setActiveSection(s as AppNavSection)}
           />
+        )}
+
+        {/* VIEW 10: ANALYSIS WORKSPACE (Phase 6) */}
+        {activeSection === 'analysis' && stats && (
+          <AnalysisWorkspace
+            data={dataPoints}
+            stats={stats}
+            xLabel={xLabel}
+            yLabel={yLabel}
+            xUnit={xUnit}
+            yUnit={yUnit}
+          />
+        )}
+        {activeSection === 'analysis' && !stats && (
+          <div className="bg-white border border-neutral-200 rounded-xl p-6 text-center text-xs text-neutral-500">
+            Provide at least 2 valid data points in the Regression Lab to enable advanced analysis.
+          </div>
         )}
       </main>
 

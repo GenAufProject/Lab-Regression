@@ -625,16 +625,9 @@ export type UserPreferences = {
   presentationMode: boolean;
 };
 
-export type AppNavSection =
-  | 'dashboard'
-  | 'learn'
-  | 'regression'
-  | 'transformations'
-  | 'simulator'
-  | 'pk'
-  | 'practice'
-  | 'reference'
-  | 'settings';
+// Phase 6: AppNavSection now includes 'analysis'. The full definition is at
+// the bottom of this file (after Phase 6 types) to keep all nav options
+// in one place. The duplicate is intentionally removed here.
 
 // ===========================================================================
 // Phase 5 — Learning & Interactive Education Engine types (spec §2, §14, §18)
@@ -841,3 +834,301 @@ export type GuidedCalculationTrace = {
   /** The regression engine result that produced this trace. */
   engineResultType: 'ols' | 'pk';
 };
+
+// ===========================================================================
+// Phase 6 — Advanced Analysis, Diagnostics & Scientific Reporting (spec §3-§21)
+// ===========================================================================
+
+/**
+ * Phase 6: Diagnostic flags for a single observation (spec §6).
+ *
+ * Flags are educational indicators — they do NOT mean an observation is
+ * "wrong" or should be deleted (spec §29). The UI uses cautious wording:
+ * "Potential outlier", "High leverage", "Potentially influential".
+ */
+export type DiagnosticFlag =
+  | 'large-residual'
+  | 'high-leverage'
+  | 'potentially-influential'
+  | 'potential-outlier'
+  | 'review-observation';
+
+/**
+ * Phase 6: Per-observation diagnostic summary (spec §6).
+ *
+ * Consumes the Phase 2 RegressionPoint (which already has leverage,
+ * Cook's distance, and studentized residuals) and adds structured flags.
+ */
+export type ObservationDiagnostic = {
+  index: number;
+  id: string;
+  x: number;
+  y: number;
+  fitted: number;
+  residual: number;
+  standardizedResidual: number;
+  studentizedResidual: number;
+  leverage: number;
+  cooksDistance: number;
+  flags: DiagnosticFlag[];
+};
+
+/**
+ * Phase 6: Summary of all observation diagnostics (spec §7).
+ */
+export type DiagnosticsSummary = {
+  observations: ObservationDiagnostic[];
+  n: number;
+  maxLeverage: number;
+  maxCooksDistance: number;
+  meanLeverage: number;
+  flaggedCount: number;
+  flags: DiagnosticFlag[];
+  /** Documented thresholds used for flagging (spec §6). */
+  thresholds: {
+    leverageThreshold: number;
+    cooksThreshold: number;
+    studentizedResidualThreshold: number;
+  };
+};
+
+/**
+ * Phase 6: Residual pattern classification (spec §9).
+ *
+ * The classification is educational and cautious — it does not make
+ * definitive statistical claims (spec §28).
+ */
+export type ResidualPattern =
+  | 'random'
+  | 'curvature'
+  | 'heteroscedasticity'
+  | 'insufficient-data';
+
+export type ResidualDiagnosticsResult = {
+  pattern: ResidualPattern;
+  patternDescription: string;
+  residualSum: number;
+  residualMean: number;
+  maxAbsResidual: number;
+  maxAbsStudentizedResidual: number;
+  /** Data for Q-Q plot (theoretical quantiles vs ordered residuals). */
+  qqPlotData: { theoretical: number; observed: number; index: number }[];
+  /** Data for residual histogram. */
+  histogramBins: { binStart: number; binEnd: number; count: number }[];
+  /** Data for scale-location plot (fitted vs √|standardized residual|). */
+  scaleLocationData: { fitted: number; sqrtAbsStdResidual: number }[];
+  interpretation: string;
+};
+
+/**
+ * Phase 6: Confidence/prediction interval band data (spec §10).
+ *
+ * Reuses the Phase 2 `predictY` function. The band is a set of (x, y, ciLower,
+ * ciUpper, piLower, piUpper) points across the X range for visualization.
+ */
+export type IntervalBandPoint = {
+  x: number;
+  predicted: number;
+  ciLower: number;
+  ciUpper: number;
+  piLower: number;
+  piUpper: number;
+};
+
+export type IntervalBand = {
+  points: IntervalBandPoint[];
+  confidenceLevel: number;
+  /** True if the band could not be computed (df ≤ 0 or sxx ≤ 0). */
+  suppressed: boolean;
+  suppressedReason?: string;
+};
+
+/**
+ * Phase 6: Model comparison entry (spec §12, §13).
+ *
+ * CRITICAL (spec §12): R² values across different response scales are NOT
+ * directly comparable. The comparison entry explicitly labels the scale.
+ */
+export type ModelComparisonEntry = {
+  modelId: string;
+  modelName: string;
+  transformation: 'none' | 'ln' | 'log10';
+  /** The scale on which R² is computed (spec §12). */
+  rSquaredScale: 'original-Y' | 'ln(Y)' | 'log10(Y)';
+  rSquared: number;
+  adjustedRSquared: number;
+  residualStandardError: number;
+  rmse: number;
+  /** RMSE back-transformed to original Y scale (for ln/log10 models). */
+  rmseOriginalScale?: number;
+  slope: number;
+  intercept: number;
+  n: number;
+  /** Whether the transformation domain is valid (all Y > 0 for log). */
+  domainValid: boolean;
+  domainError?: string;
+  equation: string;
+  backTransformedEquation?: string;
+  /** Educational note about this model's interpretability. */
+  interpretabilityNote: string;
+};
+
+export type ModelComparisonResult = {
+  models: ModelComparisonEntry[];
+  /** Educational warning about cross-scale R² comparison (spec §12). */
+  comparisonCaveat: string;
+};
+
+/**
+ * Phase 6: Structured scientific finding (spec §19).
+ *
+ * The interpretation engine generates findings with conservative language.
+ * Never "Model is proven correct." Instead: "Results are consistent with..."
+ */
+export type ScientificFinding = {
+  severity: 'info' | 'warning' | 'critical';
+  category: string;
+  title: string;
+  explanation: string;
+  recommendation?: string;
+};
+
+/**
+ * Phase 6: PK terminal-phase sensitivity entry (spec §16).
+ *
+ * Shows how k, t½, R², and intercept change when different numbers of
+ * terminal points are used. This is an educational diagnostic — it does
+ * NOT automatically select the "best" phase (spec §16).
+ */
+export type TerminalPhaseSensitivityEntry = {
+  pointCount: number;
+  timeRange: { start: number; end: number };
+  slope: number;
+  intercept: number;
+  k: number;
+  halfLife: number;
+  rSquared: number;
+};
+
+export type TerminalPhaseSensitivityResult = {
+  entries: TerminalPhaseSensitivityEntry[];
+  /** Educational caveat (spec §16). */
+  caveat: string;
+};
+
+/**
+ * Phase 6: PK AUC report (spec §17).
+ */
+export type PKAUCReport = {
+  aucLast: number;
+  aucExtra: number;
+  aucTotal: number;
+  aucTheoretical: number;
+  cLast: number;
+  tLast: number;
+  k: number;
+  extrapPercentage: number;
+  extrapolationSuppressed: boolean;
+  suppressedReason?: string;
+};
+
+/**
+ * Phase 6: Machine-readable analysis report (spec §21).
+ */
+export type AnalysisReport = {
+  metadata: {
+    generatedAt: string;
+    applicationVersion: string;
+    analysisType: 'ols' | 'log-linear' | 'pk';
+  };
+  dataset: {
+    n: number;
+    xLabel: string;
+    yLabel: string;
+    xUnit?: string;
+    yUnit?: string;
+    xRange: { min: number; max: number };
+    yRange: { min: number; max: number };
+    points: { x: number; y: number }[];
+  };
+  regression?: {
+    model: string;
+    transformation: string;
+    slope: number;
+    intercept: number;
+    rSquared: number;
+    adjustedRSquared: number;
+    residualStandardError: number;
+    rmse: number;
+    sse: number;
+    sst: number;
+    ssr: number;
+    n: number;
+    degreesOfFreedom: number;
+    pValueSlope?: number;
+    fStat?: number;
+    equation: string;
+  };
+  diagnostics?: {
+    maxLeverage: number;
+    maxCooksDistance: number;
+    meanLeverage: number;
+    flaggedObservations: number;
+    flags: DiagnosticFlag[];
+    residualPattern: ResidualPattern;
+  };
+  transformation?: {
+    type: string;
+    domainValid: boolean;
+    backTransformedEquation?: string;
+  };
+  pharmacokinetics?: {
+    logBase: string;
+    k: number;
+    halfLife: number;
+    c0: number;
+    aucLast: number;
+    aucExtra: number;
+    aucTotal: number;
+    extrapPercentage: number;
+    terminalPhasePoints: number;
+    terminalPhaseRange: { start: number; end: number };
+    rSquared: number;
+  };
+  findings: ScientificFinding[];
+  warnings: string[];
+};
+
+/**
+ * Phase 6: Analysis history entry (spec §22).
+ */
+export type AnalysisHistoryEntry = {
+  id: string;
+  timestamp: string;
+  analysisType: 'ols' | 'log-linear' | 'pk';
+  datasetName: string;
+  transformation: string;
+  keyResults: {
+    slope?: number;
+    intercept?: number;
+    rSquared?: number;
+    k?: number;
+    halfLife?: number;
+    c0?: number;
+    aucTotal?: number;
+  };
+  /** Full report snapshot for reproducibility (spec §23). */
+  reportSnapshot: AnalysisReport;
+};
+
+export type AppNavSection =
+  | 'dashboard'
+  | 'learn'
+  | 'regression'
+  | 'transformations'
+  | 'simulator'
+  | 'pk'
+  | 'practice'
+  | 'reference'
+  | 'settings'
+  | 'analysis';
